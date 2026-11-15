@@ -81,3 +81,17 @@ Category alerts group to one row per company per day (expandable); unread badge 
 
 ### D-20: FINN_MODE=snapshot; runtime-only requirements; single container
 `FINN_MODE=snapshot` (Dockerfile default) forces LLM_ENABLED=0 and makes POST /api/refresh return "live refresh disabled in hosted demo, data as of <date>" instead of touching NSE/screener. requirements.txt pins runtime-only deps (fastapi, uvicorn, pydantic, python-dotenv, requests); excluded yfinance, beautifulsoup4, lxml, pandas, numpy, PyMuPDF — they're local-refresh-only and never imported at app runtime (verified: fresh venv, 20 packages, all endpoints + /health + / + gated /api/refresh OK with no .env). Docker: python:3.12-slim, copies backend + data/finn.db + portfolio.json + web/dist; DB auto-copies to a temp path if FS is read-only. Docker not installed locally — verified via venv only. README + DEPLOY.md (Render free tier + HF Spaces) written.
+
+## Demo clock + results card + card content — 2026-11-15
+
+### D-21: Demo clock — all windows anchor to data_as_of EOD, not real now
+Weekend/stale data made real-now windows empty and forced auto-widen on every load. Digest cutoff = data_as_of day 23:59:59 minus window; /api/meta added for the alerts badge (7d of data_as_of, caps "99+"); portfolio unseen counts clamp `since` to data_as_of and compare on ts_iso. Widened note now clears on non-widened loads (was: stale forever) and the highlighted chip always equals the window shown. Header: chips moved to their own wrapped row (was: squeezed beside the h1, clipped at 390px).
+
+### D-22: Results card = screener standardised data, zero LLM
+Per-filing quarter matched from filing text ("...ended 30th September 2026", 3 patterns); fallback = latest quarter-end <= filing date. Rows Revenue/EBITDA/PBT/PAT + QoQ/YoY % and abs + margins, all from `screener_fundamentals` (consolidated basis detected from which raw HTML variant was cached). Banks/NBFCs (no Operating Profit, Revenue+ present): EBITDA row renders n/a with note; unfiled quarters: latest shown + "not yet in standardised data". Verified against HAL's filing: Sales+ 7613cr = standalone total income 7,61,311 lakh in the PDF summary. Rejected: NSE financial-results endpoint (needs live network; snapshot mode must not).
+
+### D-23: Card headlines clamped; results-mentioning bodies linked; empty cards demoted
+voiceSummary clamped to 2 lines with "more" (walls of text were breaking the 10-second test). Bodies mentioning financial results get "Financial results filed — see results card" + a chip that filters to that symbol's results. Clusters with no voice summary can no longer tier above routine (was: bare "Outcome of Board Meeting" in Must-see). Tier math unchanged otherwise (D-18 relative ranking).
+
+### D-24: Alert reasons computed at read time, not scan time
+Enrichment in /api/alerts/events + dryrun: company name (screener title, html-unescaped), one-line reason built from kind/value + same-day price move + results-filing check ("Volume 2.5x 20-day average, price +4.9%"). Stored messages left untouched — re-scanning to rewrite 147 rows would have churned the snapshot for cosmetics. Full "31 Oct 2026" dates rendered client-side.
