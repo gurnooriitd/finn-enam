@@ -16,10 +16,28 @@ export interface ScoreBreakdown {
   [k: string]: unknown;
 }
 
+export interface PriceCtx {
+  day_pct: number | null;
+  vol_ratio: number | null;
+  price_date: string | null;
+}
+
+export interface DigestChild {
+  id: string;
+  ts: string;
+  ts_iso: string | null;
+  subject: string;
+  voice_summary: string | null;
+  attachment_url: string;
+  score: number | null;
+  price_ctx: PriceCtx;
+}
+
 export interface DigestItem {
   id: string;
   symbol: string;
   ts: string;
+  ts_iso: string | null;
   subject: string;
   voice_summary: string | null;
   attachment_url: string;
@@ -27,13 +45,15 @@ export interface DigestItem {
   score: number;
   tier: string;
   score_breakdown: ScoreBreakdown;
-  price: number | null;
-  volume: number | null;
+  child_count: number;
+  price_ctx: PriceCtx;
+  children: DigestChild[];
 }
 
 export interface Digest {
   window: string;
   cutoff: string;
+  data_as_of: string | null;
   total: number;
   summary: { must_see: number; worth_a_look: number; routine: number };
   must_see: DigestItem[];

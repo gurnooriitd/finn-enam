@@ -7,7 +7,6 @@ Stores breakdown dict alongside score.
 import json
 import sqlite3
 import datetime
-from statistics import mean
 
 from backend.config import DB_PATH, PORTFOLIO_TICKERS
 
@@ -62,36 +61,16 @@ def _load_weights() -> dict[str, float]:
     return _PORT_WEIGHTS
 
 
-def _get_volume_ratio(symbol: str, date_str: str, conn: sqlite3.Connection) -> float | None:
-    """Today's volume / 20-day average. Returns None if data missing."""
-    try:
-        rows = conn.execute(
-            """SELECT volume, date FROM prices WHERE symbol=? AND date<=?
-               ORDER BY date DESC LIMIT 21""",
-            (symbol, date_str)
-        ).fetchall()
-        if len(rows) < 2:
-            return None
-        today_vol = rows[0]["volume"]
-        avg_vol = mean(r["volume"] for r in rows[1:])
-        return today_vol / avg_vol if avg_vol > 0 else None
-    except Exception:
-        return None
+def _get_volume_ratio(symbol: str, ts: str, conn: sqlite3.Connection) -> float | None:
+    """Volume ratio at the filing's date (next trading day if after close)."""
+    from backend.push.context import price_context
+    return price_context(symbol, ts, conn)["vol_ratio"]
 
 
-def _get_price_move(symbol: str, date_str: str, conn: sqlite3.Connection) -> float | None:
-    """Day % change on announcement date."""
-    try:
-        rows = conn.execute(
-            """SELECT close FROM prices WHERE symbol=? AND date<=?
-               ORDER BY date DESC LIMIT 2""",
-            (symbol, date_str)
-        ).fetchall()
-        if len(rows) < 2:
-            return None
-        return (rows[0]["close"] - rows[1]["close"]) / rows[1]["close"] * 100
-    except Exception:
-        return None
+def _get_price_move(symbol: str, ts: str, conn: sqlite3.Connection) -> float | None:
+    """Day % change on the filing's date (next trading day if after close)."""
+    from backend.push.context import price_context
+    return price_context(symbol, ts, conn)["day_pct"]
 
 
 def _tier(score: float) -> str:
@@ -150,13 +129,12 @@ def score_announcement(
             rating_boost = 3.0
             breakdown["rating_downgrade_boost"] = rating_boost
 
-    # Anomaly boost: volume or price spike on announcement date
-    ann_date = ts[:10] if ts else ""
+    # Anomaly boost: volume or price spike at the filing's date
     anomaly_boost = 0.0
     anomaly_note = ""
-    if ann_date:
-        vol_ratio = _get_volume_ratio(symbol, ann_date, conn)
-        price_move = _get_price_move(symbol, ann_date, conn)
+    if ts:
+        vol_ratio = _get_volume_ratio(symbol, ts, conn)
+        price_move = _get_price_move(symbol, ts, conn)
         if vol_ratio and vol_ratio >= 2.0:
             anomaly_boost = min(3.0, vol_ratio * 0.8)
             anomaly_note += f"volume {vol_ratio:.1f}x "

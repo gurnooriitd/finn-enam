@@ -61,14 +61,16 @@ def _save_cache(name: str, data):
 
 
 def fetch_announcements(symbol: str, days: int = 30) -> list[dict]:
-    cache_name = f"ann_{symbol}_{days}d"
+    s = _get_session()
+    end = datetime.date.today()
+    start = end - datetime.timedelta(days=days)
+    # Date-ranged calls: key includes the range, so a new range never hits an
+    # old cache. Only same-day re-runs reuse the fetch (6h TTL).
+    cache_name = f"ann_{symbol}_{start.isoformat()}_{end.isoformat()}"
     cached = _load_cache(cache_name)
     if cached is not None:
         return cached
 
-    s = _get_session()
-    end = datetime.date.today()
-    start = end - datetime.timedelta(days=days)
     url = (
         f"https://www.nseindia.com/api/corporate-announcements"
         f"?index=equities&symbol={symbol}"
@@ -133,11 +135,15 @@ def upsert_announcements(symbol: str, items: list[dict], conn: sqlite3.Connectio
         if att and not att.startswith("http"):
             att = f"https://nsearchives.nseindia.com/corporate/{att}"
 
+        from backend.push.context import parse_ts
+        parsed = parse_ts(ts)
+        ts_iso = parsed.isoformat(sep=" ") if parsed else None
+
         cur.execute(
             """INSERT OR IGNORE INTO announcements
-               (id, symbol, ts, subject, raw_desc, voice_summary, attachment_url, exchange, seq_id)
-               VALUES (?,?,?,?,?,?,?,'NSE',?)""",
-            (ann_id, symbol, ts, subject, raw_desc, voice_summary, att, seq_id)
+               (id, symbol, ts, ts_iso, subject, raw_desc, voice_summary, attachment_url, exchange, seq_id)
+               VALUES (?,?,?,?,?,?,?,?,'NSE',?)""",
+            (ann_id, symbol, ts, ts_iso, subject, raw_desc, voice_summary, att, seq_id)
         )
     conn.commit()
 

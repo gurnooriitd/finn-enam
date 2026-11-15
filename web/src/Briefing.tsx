@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, Digest, DigestItem, Holding } from "./api";
+import { api, Digest, DigestChild, DigestItem, Holding } from "./api";
 import { fmtTs } from "./api";
 import { Chip, Delta, Empty, ErrorBox, Skeleton } from "./ui";
 
@@ -12,66 +12,131 @@ const RAIL: Record<string, string> = {
 
 export const tierRail = (tier: string) => RAIL[tier] || "var(--line)";
 
-export function MustSeeCard({ item, h, onOpen }: { item: DigestItem; h?: Holding; onOpen: (i: DigestItem) => void }) {
+const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const fmtAsOf = (iso: string | null) => {
+  if (!iso) return "";
+  const d = new Date(iso.slice(0, 10) + "T00:00:00");
+  return isNaN(d.getTime()) ? iso : `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`;
+};
+
+function ChildList({ item }: { item: DigestItem }) {
+  const all: (DigestChild & { lead?: boolean })[] = [
+    {
+      id: item.id, ts: item.ts, ts_iso: item.ts_iso, subject: item.subject,
+      voice_summary: item.voice_summary, attachment_url: item.attachment_url,
+      score: item.score, price_ctx: item.price_ctx, lead: true,
+    },
+    ...item.children,
+  ];
   return (
-    <button
-      className="card rail"
-      style={{ borderLeftColor: tierRail(item.tier), padding: "12px 14px", marginBottom: 10 }}
-      onClick={() => onOpen(item)}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
-        <span className="num" style={{ fontWeight: 600, fontSize: 15 }}>
-          {item.symbol}
-        </span>
-        <span className="num" style={{ color: "var(--muted)", fontSize: 12 }}>
-          {item.score?.toFixed(1)}
-        </span>
-      </div>
-      <div style={{ margin: "4px 0 8px", fontSize: 14, color: "var(--text)" }}>
-        {item.voice_summary || item.subject}
-      </div>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-        <Chip accent>{item.category}</Chip>
-        <Chip>{fmtTs(item.ts)}</Chip>
-        {h?.day_pct != null && (
-          <Chip>
-            <Delta pct={h.day_pct} />
-          </Chip>
-        )}
-        {h?.volume_ratio != null && <Chip accent={h.volume_ratio >= 2}>vol {h.volume_ratio.toFixed(1)}x</Chip>}
-        {item.attachment_url && (
-          <a
-            href={item.attachment_url}
-            target="_blank"
-            rel="noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            style={{ fontSize: 12.5, marginLeft: "auto" }}
-          >
-            filing PDF ↗
-          </a>
-        )}
-      </div>
-    </button>
+    <div className="lane-expand" style={{ margin: "10px 0 2px", borderTop: "1px solid var(--line)", paddingTop: 6 }}>
+      {all.map((c, i) => (
+        <div key={c.id} style={{ display: "flex", gap: 8, alignItems: "baseline", padding: "5px 0" }}>
+          <span className="num" style={{ color: "var(--muted)", fontSize: 11, minWidth: 74 }}>{fmtTs(c.ts)}</span>
+          <span style={{ fontSize: 12.5, flex: 1 }}>{c.subject}</span>
+          {c.attachment_url && (
+            <a href={c.attachment_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ fontSize: 11.5 }}>
+              PDF ↗
+            </a>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function MustSeeCard({ item, h, onOpen }: { item: DigestItem; h?: Holding; onOpen: (i: DigestItem) => void }) {
+  const [open, setOpen] = useState(false);
+  const pc = item.price_ctx;
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <button
+        className="card rail"
+        style={{ borderLeftColor: tierRail(item.tier), padding: "12px 14px", width: "100%" }}
+        onClick={() => onOpen(item)}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
+          <span className="num" style={{ fontWeight: 600, fontSize: 15 }}>
+            {item.symbol}
+          </span>
+          <span className="num" style={{ color: "var(--muted)", fontSize: 12 }}>
+            {item.score?.toFixed(1)}
+          </span>
+        </div>
+        <div style={{ margin: "4px 0 8px", fontSize: 14, color: "var(--text)", textAlign: "left" }}>
+          {item.voice_summary || item.subject}
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          <Chip accent>{item.category}</Chip>
+          <Chip>{fmtTs(item.ts)}</Chip>
+          {pc?.day_pct != null && (
+            <Chip>
+              <Delta pct={pc.day_pct} />
+            </Chip>
+          )}
+          {pc?.vol_ratio != null && <Chip accent={pc.vol_ratio >= 2}>vol {pc.vol_ratio.toFixed(1)}x</Chip>}
+          {item.child_count > 1 && (
+            <button
+              className="chip accent"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen(!open);
+              }}
+            >
+              x{item.child_count}
+              {open ? " ▲" : " ▼"}
+            </button>
+          )}
+          {item.attachment_url && (
+            <a
+              href={item.attachment_url}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              style={{ fontSize: 12.5, marginLeft: "auto" }}
+            >
+              filing PDF ↗
+            </a>
+          )}
+        </div>
+      </button>
+      {open && item.child_count > 1 && <ChildList item={item} />}
+    </div>
   );
 }
 
 export function OneLiner({ item, onOpen }: { item: DigestItem; onOpen: (i: DigestItem) => void }) {
+  const [open, setOpen] = useState(false);
   return (
-    <button
-      className="card rail"
-      style={{ borderLeftColor: tierRail(item.tier), padding: "9px 12px", marginBottom: 6, display: "flex", gap: 8, alignItems: "baseline" }}
-      onClick={() => onOpen(item)}
-    >
-      <span className="num" style={{ fontWeight: 600, fontSize: 13, minWidth: 92, textAlign: "left" }}>
-        {item.symbol}
-      </span>
-      <span style={{ fontSize: 13, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {item.voice_summary || item.subject}
-      </span>
-      <span className="num" style={{ color: "var(--muted)", fontSize: 11.5 }}>
-        {item.score?.toFixed(1)}
-      </span>
-    </button>
+    <div>
+      <button
+        className="card rail"
+        style={{ borderLeftColor: tierRail(item.tier), padding: "9px 12px", marginBottom: 6, display: "flex", gap: 8, alignItems: "baseline", width: "100%" }}
+        onClick={() => onOpen(item)}
+      >
+        <span className="num" style={{ fontWeight: 600, fontSize: 13, minWidth: 92, textAlign: "left" }}>
+          {item.symbol}
+        </span>
+        <span style={{ fontSize: 13, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {item.voice_summary || item.subject}
+        </span>
+        {item.child_count > 1 && (
+          <button
+            className="chip"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(!open);
+            }}
+          >
+            x{item.child_count}
+          </button>
+        )}
+        <span className="num" style={{ color: "var(--muted)", fontSize: 11.5 }}>
+          {item.score?.toFixed(1)}
+        </span>
+      </button>
+      {open && item.child_count > 1 && <ChildList item={item} />}
+    </div>
   );
 }
 
@@ -177,15 +242,22 @@ export default function Briefing({ bySymbol, symbolFilter, clearFilter, onOpen }
         </h1>
         <div className="windowchips" role="tablist" aria-label="window">
           {WINDOWS.map((w) => (
-            <button key={w} className={wanted === w ? "on" : ""} onClick={() => setWanted(w)}>
+            <button key={w} className={effWindow === w ? "on" : ""} onClick={() => setWanted(w)}>
               {w}
             </button>
           ))}
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 8, alignItems: "center", margin: "2px 0 4px", minHeight: 24 }}>
+      {/* Directly under the window chips: widened note + data freshness */}
+      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", margin: "0 0 6px", minHeight: 22 }}>
         {widenedNote && <Chip accent>{widenedNote}</Chip>}
+        {filtered?.data_as_of && (
+          <Chip>data as of {fmtAsOf(filtered.data_as_of)}</Chip>
+        )}
+      </div>
+
+      <div style={{ display: "flex", gap: 8, alignItems: "center", margin: "2px 0 4px", minHeight: 24 }}>
         {symbolFilter && (
           <button className="chip" onClick={clearFilter} style={{ minHeight: 24 }}>
             {symbolFilter} ✕

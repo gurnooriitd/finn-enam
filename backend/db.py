@@ -135,6 +135,20 @@ def init_db():
     );
     """)
 
+    # Migration: sortable ISO timestamp column (NSE ts is 'DD-Mon-YYYY HH:MM:SS',
+    # which does not sort chronologically as a string).
+    cur.execute("PRAGMA table_info(announcements)")
+    cols = {r[1] for r in cur.fetchall()}
+    if "ts_iso" not in cols:
+        cur.execute("ALTER TABLE announcements ADD COLUMN ts_iso TEXT")
+        rows = cur.execute("SELECT id, ts FROM announcements").fetchall()
+        from backend.push.context import parse_ts
+        updates = []
+        for rid, ts in rows:
+            d = parse_ts(ts or "")
+            updates.append((d.isoformat(sep=" ") if d else None, rid))
+        cur.executemany("UPDATE announcements SET ts_iso=? WHERE id=?", updates)
+
     # Seed default alert rules if none exist
     cur.execute("SELECT COUNT(*) FROM alert_rules")
     if cur.fetchone()[0] == 0:

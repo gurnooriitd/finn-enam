@@ -97,7 +97,7 @@ def scan_alerts():
         elif kind == "announcement_category":
             cats = set((rule["categories"] or "").split(","))
             anns = conn.execute(
-                "SELECT id, symbol, ts, category FROM announcements WHERE category IN ({})".format(
+                "SELECT id, symbol, ts_iso, category FROM announcements WHERE category IN ({})".format(
                     ",".join("?" * len(cats))
                 ),
                 list(cats)
@@ -105,7 +105,7 @@ def scan_alerts():
             for ann in anns:
                 if scope_symbol and scope_symbol != ann["symbol"]:
                     continue
-                date = ann["ts"][:10] if ann["ts"] else ""
+                date = (ann["ts_iso"] or "")[:10]
                 msg = f"{ann['symbol']} {ann['category']} announcement on {date}"
                 try:
                     conn.execute(

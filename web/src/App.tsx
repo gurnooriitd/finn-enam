@@ -26,7 +26,10 @@ export default function App() {
       .events(200)
       .then((events: AlertEvent[]) => {
         const seen = new Set<string>(JSON.parse(localStorage.getItem(SEEN_EVENTS_KEY) || "[]"));
-        setUnread(events.filter((e) => !seen.has(String(e.id))).length);
+        const week = Date.now() - 7 * 24 * 3600 * 1000;
+        setUnread(
+          events.filter((e) => !seen.has(String(e.id)) && new Date(e.fired_at).getTime() > week).length
+        );
       })
       .catch(() => {});
   }, []);

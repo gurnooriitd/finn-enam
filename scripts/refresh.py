@@ -61,11 +61,25 @@ def main():
     else:
         print("\n[4/6] Screener: SKIPPED")
 
+    # 4b. Dedupe identical filings (symbol, ts, subject)
+    import sqlite3
+    from backend.config import DB_PATH
+    conn = sqlite3.connect(DB_PATH)
+    before = conn.execute("SELECT COUNT(*) FROM announcements").fetchone()[0]
+    conn.execute(
+        """DELETE FROM announcements WHERE id NOT IN (
+             SELECT MIN(id) FROM announcements GROUP BY symbol, ts, subject)"""
+    )
+    removed = before - conn.execute("SELECT COUNT(*) FROM announcements").fetchone()[0]
+    conn.commit()
+    conn.close()
+    print(f"\n[4b] Dedupe (symbol, ts, subject): removed {removed} duplicates")
+
     # 5. Classify + score announcements
     if not args.skip_classify:
-        print("\n[5/6] Classify announcements")
+        print("\n[5/6] Classify announcements (force: rules change reclassifies all)")
         from backend.push.classify import run_classify_all
-        run_classify_all()
+        run_classify_all(force=True)
 
     if not args.skip_score:
         print("       Score announcements")

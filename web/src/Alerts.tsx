@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, AlertEvent, Rule } from "./api";
 import { Chip, Empty, ErrorBox, Skeleton } from "./ui";
 
@@ -13,6 +13,7 @@ export default function Alerts({ onSeen, onOpenStock }: { onSeen: () => void; on
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [dry, setDry] = useState<{ total_would_fire: number; events: AlertEvent[] } | null>(null);
+  const [openRow, setOpenRow] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -33,6 +34,29 @@ export default function Alerts({ onSeen, onOpenStock }: { onSeen: () => void; on
   }, [load]);
 
   const seenIds = new Set<string>(JSON.parse(localStorage.getItem("finn.seenEvents") || "[]"));
+
+  // Category alerts: one row per company per day; volume/price alerts stay individual.
+  const rows = useMemo(() => {
+    const catGroups = new Map<string, AlertEvent[]>();
+    const singles: { key: string; symbol: string; date: string; kind: string; items: AlertEvent[] }[] = [];
+    for (const e of events) {
+      if (e.kind === "announcement_category") {
+        const k = `${e.symbol}|${e.date}`;
+        if (!catGroups.has(k)) catGroups.set(k, []);
+        catGroups.get(k)!.push(e);
+      } else {
+        singles.push({ key: `s${e.id}`, symbol: e.symbol, date: e.date, kind: e.kind, items: [e] });
+      }
+    }
+    const grouped = [...catGroups.entries()].map(([k, items]) => ({
+      key: `c${k}`,
+      symbol: items[0].symbol,
+      date: items[0].date,
+      kind: "announcement_category",
+      items,
+    }));
+    return [...grouped, ...singles].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.symbol.localeCompare(b.symbol)));
+  }, [events]);
 
   const saveRule = async (rule: Rule, patch: Partial<Rule>) => {
     const next = { ...rule, ...patch };
@@ -64,28 +88,52 @@ export default function Alerts({ onSeen, onOpenStock }: { onSeen: () => void; on
               <button className="btn" style={{ marginBottom: 10 }} onClick={onSeen}>
                 Mark all read
               </button>
-              {events.map((e) => {
-                const unread = !seenIds.has(String(e.id));
+              {rows.map((row) => {
+                const unread = row.items.some((e) => !seenIds.has(String(e.id)));
+                const grouped = row.kind === "announcement_category";
+                const expanded = openRow === row.key;
                 return (
-                  <button
-                    key={e.id}
-                    className="card rail"
-                    style={{
-                      padding: "10px 12px",
-                      marginBottom: 6,
-                      display: "flex",
-                      gap: 8,
-                      alignItems: "baseline",
-                      borderLeftColor: unread ? "var(--accent)" : "var(--line)",
-                    }}
-                    onClick={() => onOpenStock(e.symbol)}
-                  >
-                    <span className="num" style={{ fontWeight: unread ? 700 : 500, minWidth: 86, textAlign: "left", fontSize: 13 }}>
-                      {e.symbol}
-                    </span>
-                    <span style={{ fontSize: 13, flex: 1, textAlign: "left" }}>{e.message}</span>
-                    <span className="num" style={{ color: "var(--muted)", fontSize: 11.5 }}>{e.date}</span>
-                  </button>
+                  <div key={row.key}>
+                    <button
+                      className="card rail"
+                      style={{
+                        padding: "10px 12px",
+                        marginBottom: 6,
+                        display: "flex",
+                        gap: 8,
+                        alignItems: "baseline",
+                        width: "100%",
+                        borderLeftColor: unread ? "var(--accent)" : "var(--line)",
+                      }}
+                      onClick={() => (grouped ? setOpenRow(expanded ? "" : row.key) : onOpenStock(row.symbol))}
+                    >
+                      <span className="num" style={{ fontWeight: unread ? 700 : 500, minWidth: 86, textAlign: "left", fontSize: 13 }}>
+                        {row.symbol}
+                      </span>
+                      <span style={{ fontSize: 13, flex: 1, textAlign: "left" }}>
+                        {grouped
+                          ? `${row.items.length} announcement${row.items.length > 1 ? "s" : ""}`
+                          : row.items[0].message}
+                      </span>
+                      <span className="num" style={{ color: "var(--muted)", fontSize: 11.5 }}>
+                        {row.date}
+                        {grouped ? (expanded ? " ▲" : " ▼") : ""}
+                      </span>
+                    </button>
+                    {grouped && expanded && (
+                      <div className="lane-expand" style={{ margin: "-2px 0 8px", padding: "2px 0 2px 10px" }}>
+                        {row.items.map((e) => (
+                          <button
+                            key={e.id}
+                            onClick={() => onOpenStock(e.symbol)}
+                            style={{ display: "block", width: "100%", textAlign: "left", fontSize: 12.5, color: "var(--muted)", padding: "5px 0", background: "none", border: "none", borderBottom: "1px solid var(--line)" }}
+                          >
+                            {e.message}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </>

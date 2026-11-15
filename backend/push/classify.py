@@ -14,80 +14,60 @@ from pydantic import BaseModel
 
 from backend.config import DB_PATH
 
-# Map NSE `desc` category strings to our categories
-NSE_DESC_MAP = {
-    "results": "results",
-    "financial results": "results",
-    "quarterly results": "results",
-    "half yearly results": "results",
-    "annual results": "results",
-    "board meeting": "results",
-    "mergers / acquisitions / restructuring": "M&A",
-    "amalgamation": "M&A",
-    "demerger": "M&A",
-    "acquisition": "M&A",
-    "takeover": "M&A",
-    "fund raising": "fund_raise",
-    "rights issue": "fund_raise",
-    "ncd": "fund_raise",
-    "ipo": "fund_raise",
-    "qip": "fund_raise",
-    "fpo": "fund_raise",
-    "change in management": "management_change",
-    "appointment": "management_change",
-    "resignation": "management_change",
-    "change in directorate": "management_change",
-    "credit rating": "credit_rating",
-    "dividend": "dividend",
-    "bonus": "bonus_split",
-    "stock split": "bonus_split",
-    "split": "bonus_split",
-    "sub division": "bonus_split",
-    "capital expenditure": "capex",
-    "capex": "capex",
-    "press release": "press_release",
-    "investor presentation": "investor_meetings",
-    "investor meet": "investor_meetings",
-    "institutional investor": "investor_meetings",
-    "analyst meet": "investor_meetings",
-    "analysts/institutional investor": "investor_meetings",
-    "earnings call": "earnings_call",
-    "concall": "earnings_call",
-    "conference call": "earnings_call",
-    "agm": "agm_egm",
-    "egm": "agm_egm",
-    "postal ballot": "postal_ballot",
-    "notice": "postal_ballot",
-    "pledging": "pledging",
-    "encumbrance": "pledging",
-    "insider trading": "insider_trading",
-    "bulk deal": "insider_trading",
-    "block deal": "insider_trading",
-    "litigation": "litigation",
-    "legal": "litigation",
-    "penalty": "litigation",
-    "notice from sebi": "litigation",
-}
+# Subject-first rules. NSE's `desc` field IS the subject line; these regexes
+# are applied to the subject BEFORE anything else. Order matters: results and
+# meet/call rules run before the generic "press release"/"updates" catch-alls.
+SUBJECT_RULES = [
+    # results — only when the subject itself says so
+    (r"financial result|quarterly result|annual result|half.?yearly result", "results"),
+    # "Outcome of Board Meeting" -> results only when it mentions financial results
+    # (NSE subjects are terse; the mention usually lives in the filing body)
+    (r"outcome of board meeting", "__board_outcome__"),
+    # meets / calls: default investor_meetings; earnings_call when the subject
+    # signals a transcript / audio recording / call schedule
+    (r"con\.?\s*call|conference call|earnings call", "__call_or_meet__"),
+    (r"analysts?/institutional investor|investor meet|institutional investor|analyst meet|investor presentation|non-deal road", "investor_meetings"),
+    # press release, unless already claimed by a results rule above
+    (r"press release|media release", "press_release"),
+    # "General Updates" / bare "Updates" -> unclassified unless an earlier
+    # subject rule matched (i.e. reached only if nothing else matched)
+    (r"^general updates$|^updates$", "unclassified"),
+    (r"credit rating", "credit_rating"),
+    (r"dividend", "dividend"),
+    (r"bonus|stock split|sub.?division", "bonus_split"),
+    (r"merger|amalgamat|demerger|acquisition|scheme of arrangement|restructur|takeover|sale or disposal", "M&A"),
+    (r"allotment|issue of securities|rights issue|qip|\bncd\b|preferential|fund rais|warrant|esop|esos|esps", "fund_raise"),
+    (r"change in director|change in management|resignation|appointment|retirement|cessation|remuneration|re-appointment", "management_change"),
+    (r"pledge|encumbrance", "pledging"),
+    (r"insider|bulk deal|block deal|sast", "insider_trading"),
+    (r"action\(s\) taken|orders passed|penalt|litigation|arbitrat|adjudicat|sebi order|nclt|insolvency|winding", "litigation"),
+    (r"capex|capital expenditure|commissioning", "capex"),
+    (r"\bagm\b|\begm\b|extra.?ordinary general|shareholders meeting|postal ballot|court convened", "agm_egm"),
+    (r"bagging|receiving of order|winning of order|letter of intent|work order", "capex"),
+    (r"newspaper publication|news verification|rumour verification|certificate under sebi", "unclassified"),
+]
 
+# Body/voiceSummary keyword rules — used ONLY when the subject yields nothing.
+# NOTE: no "results" pattern here on purpose; the word "results" in a filing
+# body or voice summary must never turn a non-results filing into results.
 KEYWORD_RULES = [
     (r"\bresign(ation|ed)?\b", "management_change"),
-    (r"\bappoint(ment|ed)?\b", "management_change"),
+    (r"\bappoint(ment|ed)?\b|\bretire(ment|d)\b|\bcessation\b", "management_change"),
     (r"\bceo\b|\bcfo\b|\bmd\b|\bcoo\b|\bmanaging director\b|\bchief executive\b", "management_change"),
     (r"\bmerger\b|\bacquisition\b|\bdemerger\b|\bamalgamat", "M&A"),
     (r"\bbonus share\b|\bstock split\b|\bsub.?division\b", "bonus_split"),
     (r"\bdividend\b|\bfinal div\b|\binterim div\b", "dividend"),
-    (r"\brating\b|\bcrisil\b|\bicra\b|\bcare\b|\bindia rating\b|\bfitch\b|\bmoody\b|\bdowngrade\b", "credit_rating"),
-    (r"\bqip\b|\bncd\b|\bdebenture\b|\brights issue\b|\bfpo\b|\bpreferential\b", "fund_raise"),
-    (r"\bpleas(e|ing)\b|\bpledge\b|\bencumber\b|\bpromot(er|ors).*?pledge", "pledging"),
-    (r"\binsider\b|\bbulk deal\b|\bblock deal\b|\bsast\b|\bsebi.*acqui", "insider_trading"),
-    (r"\bpenalt(y|ies)\b|\blitigation\b|\barbitrat\b|\badjudicat\b|\bsebi order\b|\bnclt\b|\bnotice.*sebi\b", "litigation"),
+    (r"\bcrisil\b|\bicra\b|\bindia rating\b|\bfitch\b|\bmoody\b|\bdowngrade\b|\bcredit rating\b", "credit_rating"),
+    (r"\bqip\b|\bncd\b|\bdebenture\b|\brights issue\b|\bfpo\b|\bpreferential\b|\ballotment\b", "fund_raise"),
+    (r"\bpledge\b|\bencumber\b", "pledging"),
+    (r"\binsider\b|\bbulk deal\b|\bblock deal\b|\bsast\b", "insider_trading"),
+    (r"\bpenalt(y|ies)\b|\blitigation\b|\barbitrat\b|\badjudicat\b|\bsebi order\b|\bnclt\b|\baction.*taken.*order", "litigation"),
     (r"\bcapex\b|\bcapital expenditure\b|\bcommission(ed|ing)\b.*plant", "capex"),
     (r"\bagm\b|\begm\b|\bextra.ordinary general\b", "agm_egm"),
-    (r"\bpostal ballot\b|\bpostal.?ballot\b", "postal_ballot"),
-    (r"\bearnings call\b|\bconcall\b|\bconference call\b|\banalyst\b", "earnings_call"),
+    (r"\bpostal ballot\b", "postal_ballot"),
+    (r"\btranscript\b|\baudio recording\b|\bearnings call\b", "earnings_call"),
     (r"\binvestor meet\b|\binvestor presentation\b|\banalyst meet\b", "investor_meetings"),
     (r"\bpress release\b|\bmedia release\b", "press_release"),
-    (r"\bquarterly result\b|\bhalf.?year\b|\bannual result\b|\bfinancial result\b", "results"),
 ]
 
 
@@ -96,20 +76,52 @@ class CategoryResult(BaseModel):
     confidence: float
 
 
+def _subject_category(subject: str, body: str = "") -> Optional[str]:
+    """Apply SUBJECT_RULES to the subject line. NSE's desc field is the subject."""
+    s = (subject or "").lower().strip()
+    if not s:
+        return None
+    for pattern, cat in SUBJECT_RULES:
+        if re.search(pattern, s, re.IGNORECASE | re.DOTALL):
+            if cat == "__call_or_meet__":
+                # Con. Call: earnings_call when the subject signals a
+                # transcript / audio recording / schedule, else investor_meetings
+                if re.search(r"transcript|audio|schedule|intimation", s):
+                    return "earnings_call"
+                return "investor_meetings"
+            if cat == "__board_outcome__":
+                if re.search(r"financial result|quarterly result|annual result", body or "", re.IGNORECASE):
+                    return "results"
+                return None
+            return cat
+    return None
+
+
 def rule_classify(subject: str, desc: str, voice_summary: str = "") -> Optional[str]:
-    """Returns category string or None if ambiguous."""
-    text = f"{subject} {desc}".lower()
+    """Subject first; body text and voice summary only as a last resort.
 
-    # Try NSE desc field first (most reliable)
-    desc_lower = desc.lower().strip()
-    for key, cat in NSE_DESC_MAP.items():
-        if key in desc_lower:
-            return cat
+    `desc` here is NSE's attchmntText (the filing body). The word "results" in
+    a body or voice summary can never override a subject-based rule because
+    KEYWORD_RULES deliberately has no results pattern.
+    """
+    # 1. Subject (NSE desc field / subject column)
+    body = (desc or "").lower()
+    cat = _subject_category(subject, body)
+    if cat:
+        return cat
 
-    # Keyword/regex rules
-    for pattern, cat in KEYWORD_RULES:
-        if re.search(pattern, text, re.IGNORECASE):
-            return cat
+    # 2. Body text (attchmntText) — last resort before voice summary
+    if body:
+        for pattern, cat in KEYWORD_RULES:
+            if re.search(pattern, body, re.IGNORECASE):
+                return cat
+
+    # 3. Voice summary — final fallback, same keyword set (no results rule)
+    voice = (voice_summary or "").lower()
+    if voice:
+        for pattern, cat in KEYWORD_RULES:
+            if re.search(pattern, voice, re.IGNORECASE):
+                return cat
 
     return None
 
@@ -150,9 +162,12 @@ def classify_announcement(ann_id: str, subject: str, desc: str, voice_summary: s
         return "unclassified"
 
 
-def run_classify_all():
-    """Classify all uncategorized announcements in DB."""
+def run_classify_all(force: bool = False):
+    """Classify announcements in DB. force=True reclassifies every row
+    (used when rules change); default only fills NULLs."""
     conn = sqlite3.connect(DB_PATH)
+    if force:
+        conn.execute("UPDATE announcements SET category=NULL")
     rows = conn.execute(
         "SELECT id, subject, raw_desc, voice_summary FROM announcements WHERE category IS NULL"
     ).fetchall()
