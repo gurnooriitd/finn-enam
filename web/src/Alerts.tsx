@@ -110,14 +110,8 @@ export default function Alerts({ onSeen, onOpenStock }: { onSeen: () => void; on
                       <span className="num" style={{ fontWeight: unread ? 700 : 500, minWidth: 86, textAlign: "left", fontSize: 13 }}>
                         {row.symbol}
                       </span>
-                      <span style={{ fontSize: 13, flex: 1, textAlign: "left" }}>
-                        <span style={{ fontWeight: unread ? 600 : 400 }}>
-                          {row.items[0].company || row.symbol}
-                        </span>
-                        {" — "}
-                        {grouped
-                          ? `${row.items.length} announcement${row.items.length > 1 ? "s" : ""}`
-                          : row.items[0].reason || row.items[0].message}
+                      <span style={{ fontSize: 13, flex: 1, textAlign: "left", fontWeight: unread ? 600 : 400 }}>
+                        {row.items[0].reason || row.items[0].message}
                       </span>
                       <span className="num" style={{ color: "var(--muted)", fontSize: 11.5 }}>
                         {fmtDate(row.date)}
@@ -127,13 +121,22 @@ export default function Alerts({ onSeen, onOpenStock }: { onSeen: () => void; on
                     {grouped && expanded && (
                       <div className="lane-expand" style={{ margin: "-2px 0 8px", padding: "2px 0 2px 10px" }}>
                         {row.items.map((e) => (
-                          <button
+                          <div
                             key={e.id}
-                            onClick={() => onOpenStock(e.symbol)}
-                            style={{ display: "block", width: "100%", textAlign: "left", fontSize: 12.5, color: "var(--muted)", padding: "5px 0", background: "none", border: "none", borderBottom: "1px solid var(--line)" }}
+                            style={{ display: "flex", gap: 8, alignItems: "baseline", padding: "5px 0", borderBottom: "1px solid var(--line)" }}
                           >
-                            {(e.reason || e.message)}
-                          </button>
+                            <button
+                              onClick={() => onOpenStock(e.symbol)}
+                              style={{ flex: 1, textAlign: "left", fontSize: 12.5, color: "var(--muted)", background: "none", border: "none", padding: 0 }}
+                            >
+                              {e.summary || e.reason || e.message}
+                            </button>
+                            {e.attachment_url && (
+                              <a href={e.attachment_url} target="_blank" rel="noreferrer" style={{ fontSize: 11.5 }}>
+                                PDF ↗
+                              </a>
+                            )}
+                          </div>
                         ))}
                       </div>
                     )}

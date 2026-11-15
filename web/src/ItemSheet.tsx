@@ -1,7 +1,7 @@
 import { DigestItem, num } from "./api";
 import { fmtTs } from "./api";
 import { Chip, Sheet } from "./ui";
-import { ResultsTable, tierRail } from "./Briefing";
+import { MgmtLine, ResultsTable, tierRail } from "./Briefing";
 
 function BreakdownRow({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
@@ -26,6 +26,17 @@ export default function ItemSheet({ item, onClose }: { item: DigestItem; onClose
         </span>
       </div>
       <div style={{ color: "var(--muted)", fontSize: 12.5, marginBottom: 12 }}>{fmtTs(item.ts)} · NSE</div>
+
+      {item.mgmt_change && (
+        <div style={{ marginBottom: 12 }}>
+          <MgmtLine m={item.mgmt_change} />
+          {item.mgmt_change.lookup_url && (
+            <a href={item.mgmt_change.lookup_url} target="_blank" rel="noreferrer" style={{ fontSize: 12.5 }}>
+              Look up background ↗
+            </a>
+          )}
+        </div>
+      )}
 
       <div style={{ fontSize: 15, lineHeight: 1.5, marginBottom: 14 }}>{item.voice_summary || item.subject}</div>
 

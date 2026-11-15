@@ -50,8 +50,19 @@ export interface ResultsSummary {
   rows: ResultsRow[];
   ebitda_margin: number | null;
   pat_margin: number | null;
+  ebitda_margin_yoy?: number | null;
+  pat_margin_yoy?: number | null;
+  takeaway?: string;
   note: string;
   available: boolean;
+}
+
+export interface MgmtChange {
+  person: string;
+  role: string | null;
+  action: string;
+  effective_date: string | null;
+  lookup_url?: string;
 }
 
 export interface DigestItem {
@@ -64,6 +75,7 @@ export interface DigestItem {
   headline?: string;
   mentions_results?: boolean;
   results_summary?: ResultsSummary | null;
+  mgmt_change?: MgmtChange | null;
   attachment_url: string;
   category: string;
   score: number;
@@ -108,6 +120,8 @@ export interface AlertEvent {
   fired_at: string;
   company?: string;
   reason?: string;
+  summary?: string;
+  attachment_url?: string;
 }
 
 export interface Holding {
@@ -116,6 +130,7 @@ export interface Holding {
   last_close: number | null;
   day_pct: number | null;
   volume_ratio: number | null;
+  weight?: number | null;
   spark: number[];
   unseen_filings: number;
 }
@@ -123,6 +138,7 @@ export interface Holding {
 export interface PortfolioResp {
   synthetic: boolean;
   note: string;
+  data_as_of?: string | null;
   holdings: Holding[];
 }
 

@@ -2,12 +2,21 @@ import { Holding } from "./api";
 import { inr, num } from "./api";
 import { Chip, Delta, Empty, Sparkline } from "./ui";
 
+const fmtAsOf = (iso: string | null | undefined) => {
+  if (!iso) return "";
+  const d = new Date(iso.slice(0, 10) + "T00:00:00");
+  const M = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return isNaN(d.getTime()) ? iso : `${d.getDate()} ${M[d.getMonth()]} ${d.getFullYear()}`;
+};
+
 export default function Portfolio({
   holdings,
+  dataAsOf,
   onOpenStock,
   reload,
 }: {
   holdings: Holding[];
+  dataAsOf?: string | null;
   onOpenStock: (s: string) => void;
   reload: () => void;
 }) {
@@ -25,9 +34,10 @@ export default function Portfolio({
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
         <h1 style={{ fontSize: 20, margin: 0, fontWeight: 700 }}>Portfolio</h1>
         <Chip accent>synthetic weights</Chip>
+        {fmtAsOf(dataAsOf) && <Chip>as of {fmtAsOf(dataAsOf)}</Chip>}
         <span style={{ color: "var(--muted)", fontSize: 12, marginLeft: "auto" }}>EOD prices</span>
       </div>
 
@@ -41,6 +51,11 @@ export default function Portfolio({
           <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
             <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
               <span className="num" style={{ fontWeight: 700, fontSize: 14.5 }}>{h.symbol}</span>
+              {h.weight != null && (
+                <span className="num" style={{ color: "var(--muted)", fontSize: 11.5 }}>
+                  w {(h.weight * 100).toFixed(0)}%
+                </span>
+              )}
               {h.unseen_filings > 0 && <span className="badge">{h.unseen_filings} new</span>}
             </div>
             <div style={{ color: "var(--muted)", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>

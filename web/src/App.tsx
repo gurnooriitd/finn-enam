@@ -14,11 +14,18 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("briefing");
   const [symbolFilter, setSymbolFilter] = useState<string>("");
   const [holdings, setHoldings] = useState<Holding[]>([]);
+  const [portfolioAsOf, setPortfolioAsOf] = useState<string | null>(null);
   const [unread, setUnread] = useState(0);
   const [openItem, setOpenItem] = useState<DigestItem | null>(null);
 
   const loadPortfolio = useCallback(() => {
-    api.portfolio().then((p) => setHoldings(p.holdings)).catch(() => setHoldings([]));
+    api
+      .portfolio()
+      .then((p) => {
+        setHoldings(p.holdings);
+        setPortfolioAsOf(p.data_as_of || null);
+      })
+      .catch(() => setHoldings([]));
   }, []);
 
   const loadUnread = useCallback(() => {
@@ -68,7 +75,9 @@ export default function App() {
         )}
         {tab === "alerts" && <Alerts onSeen={markEventsSeen} onOpenStock={openStock} />}
         {tab === "research" && <Research />}
-        {tab === "portfolio" && <Portfolio holdings={holdings} onOpenStock={openStock} reload={loadPortfolio} />}
+        {tab === "portfolio" && (
+          <Portfolio holdings={holdings} dataAsOf={portfolioAsOf} onOpenStock={openStock} reload={loadPortfolio} />
+        )}
       </div>
 
       <nav className="tabbar" aria-label="tabs">

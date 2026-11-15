@@ -36,7 +36,12 @@ SUBJECT_RULES = [
     (r"dividend", "dividend"),
     (r"bonus|stock split|sub.?division", "bonus_split"),
     (r"merger|amalgamat|demerger|acquisition|scheme of arrangement|restructur|takeover|sale or disposal", "M&A"),
-    (r"allotment|issue of securities|rights issue|qip|\bncd\b|preferential|fund rais|warrant|esop|esos|esps", "fund_raise"),
+    # Routine share paperwork — near-zero base, must beat the fund_raise
+    # catch-all below (ESOP allotments are NOT fund raises).
+    (r"\besop\b|\besos\b|\besps\b", "unclassified"),
+    (r"trading window", "unclassified"),
+    (r"certificate under|compliance certificate|duplicate (?:share|equity) certificate", "unclassified"),
+    (r"allotment|issue of securities|rights issue|qip|\bncd\b|preferential|fund rais|warrant", "fund_raise"),
     (r"change in director|change in management|resignation|appointment|retirement|cessation|remuneration|re-appointment", "management_change"),
     (r"pledge|encumbrance", "pledging"),
     (r"insider|bulk deal|block deal|sast", "insider_trading"),

@@ -5,6 +5,7 @@ score = category_base × portfolio_weight_boost + interest_boost + anomaly_boost
 Stores breakdown dict alongside score.
 """
 import json
+import re
 import sqlite3
 import datetime
 
@@ -35,7 +36,8 @@ CATEGORY_BASE = {
 HIGH_BOOST_KEYWORDS = [
     "resign", "fraud", "default", "penalty", "downgrade",
     "insolvency", "search and seizure", "fraud", "defalcation",
-    "investigation", "nclt", "sebi", "default", "npa",
+    "investigation", "nclt", "sebi order", "sebi notice", "sebi raid",
+    "default", "npa",
 ]
 
 MEDIUM_BOOST_KEYWORDS = [
@@ -88,6 +90,7 @@ def score_announcement(
     category: str,
     ts: str,
     conn: sqlite3.Connection,
+    voice_summary: str = "",
 ) -> tuple[float, str, str]:
     """Returns (score, tier, breakdown_json)."""
     weights = _load_weights()
@@ -115,12 +118,19 @@ def score_announcement(
             breakdown.setdefault("keyword_hits", []).append(kw)
     breakdown["keyword_boost"] = kw_boost
 
-    # Management change boost: CEO/CFO/MD much higher
+    # Management change boost: new CEO/CFO/MD appointments and resignations
+    # far above re-appointments of existing directors (paperwork).
     mgmt_boost = 0.0
     if category == "management_change":
-        senior = any(k in text for k in ["ceo", "cfo", "md", "managing director", "chief executive", "chief financial"])
-        mgmt_boost = 2.0 if senior else 0.0
-        breakdown["mgmt_senior_boost"] = mgmt_boost
+        combined = f"{text} {(voice_summary or '').lower()}"
+        if re.search(r"re-?\s?appoint", combined):
+            base = 2.5
+            breakdown["category_base"] = base
+            breakdown["reappointment_demote"] = True
+        else:
+            senior = any(k in combined for k in ["ceo", "cfo", "md", "managing director", "chief executive", "chief financial"])
+            mgmt_boost = 2.0 if senior else 0.0
+            breakdown["mgmt_senior_boost"] = mgmt_boost
 
     # Credit rating: downgrade extra boost
     rating_boost = 0.0
@@ -158,13 +168,14 @@ def run_score_all():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
-        "SELECT id, symbol, subject, category, ts FROM announcements WHERE category IS NOT NULL"
+        "SELECT id, symbol, subject, category, ts, voice_summary FROM announcements WHERE category IS NOT NULL"
     ).fetchall()
 
     for row in rows:
         score, tier, breakdown = score_announcement(
             row["id"], row["symbol"], row["subject"] or "",
-            row["category"], row["ts"], conn
+            row["category"], row["ts"], conn,
+            voice_summary=row["voice_summary"] or "",
         )
         conn.execute(
             "UPDATE announcements SET priority_score=?, priority_tier=?, score_breakdown=? WHERE id=?",

@@ -75,8 +75,17 @@ def _cluster(rows: list) -> list[dict]:
     return clusters
 
 
+# Absolute floor for must-see, picked from the data: results clusters score
+# 10-12, senior management changes 10-12, real fund raises 7-9.8; routine
+# paperwork (ESOP allotments, compliance certificates, re-appointments) sits
+# below 4. 9.0 admits only the top material band, independent of window size.
+MUST_SEE_FLOOR = 9.0
+
+
 def _assign_tiers(clusters: list[dict]) -> None:
-    """Relative ranking within the window. Mutates cluster['tier']."""
+    """Relative ranking within the window. Mutates cluster['tier'].
+    must_see = top 15% of clusters AND score >= MUST_SEE_FLOOR (a window may
+    have zero must-see items). worth_a_look = next 25%."""
     ranked = sorted(
         clusters,
         key=lambda c: (
@@ -86,26 +95,28 @@ def _assign_tiers(clusters: list[dict]) -> None:
         ),
     )
     n = len(ranked)
-    n_must = min(10, max(3, -(-n * 15 // 100)), n) if n else 0  # ceil(15%), min 3, max 10
+    n_must = min(10, -(-n * 15 // 100), n) if n else 0  # ceil(15%), max 10, NO min
     n_worth = -(-n * 25 // 100)  # next 25%
 
     must_by_sym: dict[str, int] = {}
     must_left, worth_left = n_must, n_worth
     for c in ranked:
         sym = c["symbol"]
-        if must_left > 0 and must_by_sym.get(sym, 0) < 3:
+        # No content (no voice summary) -> never must-see/worth-a-look.
+        has_content = bool((c["lead"].get("voice_summary") or "").strip())
+        if (
+            must_left > 0
+            and must_by_sym.get(sym, 0) < 3
+            and (c["lead"]["score"] or 0) >= MUST_SEE_FLOOR
+            and has_content
+        ):
             c["tier"] = "must_see"
             must_by_sym[sym] = must_by_sym.get(sym, 0) + 1
             must_left -= 1
-        elif worth_left > 0:
+        elif worth_left > 0 and has_content:
             c["tier"] = "worth_a_look"
             worth_left -= 1
         else:
-            c["tier"] = "routine"
-
-    # No content (no voice summary) -> never must-see/worth-a-look.
-    for c in clusters:
-        if c["tier"] != "routine" and not (c["lead"].get("voice_summary") or "").strip():
             c["tier"] = "routine"
 
 
@@ -162,6 +173,7 @@ def get_digest(
             "ts_iso": lead["ts_iso"],
             "subject": lead["subject"],
             "voice_summary": lead["voice_summary"],
+            "raw_desc": lead["raw_desc"],
             "attachment_url": lead["attachment_url"],
             "score": lead["priority_score"],
             "breakdown": json.loads(lead["score_breakdown"] or "{}"),
@@ -192,6 +204,21 @@ def get_digest(
                 )
             except Exception:
                 rs = None
+        mgmt = None
+        if c["category"] == "management_change":
+            from backend.push.context import company_name
+            from backend.push.people import extract_mgmt_change, lookup_url
+            try:
+                mc = extract_mgmt_change(
+                    lead["subject"] or "", lead["voice_summary"] or "",
+                    lead.get("raw_desc") or "",
+                )
+                if mc:
+                    company = company_name(c["symbol"])
+                    mc["lookup_url"] = lookup_url(mc["person"], company, mc["role"])
+                    mgmt = mc
+            except Exception:
+                mgmt = None
         return {
             "id": lead["id"],
             "symbol": c["symbol"],
@@ -202,6 +229,7 @@ def get_digest(
             "headline": headline,
             "mentions_results": mentions_results,
             "results_summary": rs,
+            "mgmt_change": mgmt,
             "attachment_url": lead["attachment_url"],
             "category": c["category"],
             "score": lead["score"],

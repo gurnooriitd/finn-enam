@@ -49,10 +49,23 @@ function ArrowPct({ v }: { v: number | null }) {
   if (v == null) return <span className="num rt-na">n/a</span>;
   const up = v >= 0;
   return (
-    <span className="num" style={{ color: up ? "var(--up)" : "var(--down)" }}>
-      {up ? "▲" : "▼"} {up ? "+" : ""}
-      {v.toFixed(1)}%
+    <span
+      className="num"
+      style={{ color: up ? "var(--up)" : "var(--down)", whiteSpace: "nowrap", fontSize: 12.5 }}
+    >
+      {up ? "▲" : "▼"}{up ? "+" : ""}{v.toFixed(1)}%
     </span>
+  );
+}
+
+export function MgmtLine({ m }: { m: NonNullable<DigestItem["mgmt_change"]> }) {
+  return (
+    <div style={{ fontSize: 13, margin: "3px 0 4px", lineHeight: 1.4 }}>
+      <span style={{ fontWeight: 600 }}>{m.person}</span>
+      {m.role ? <span> — {m.role}</span> : null}
+      <span> — {m.action}</span>
+      {m.effective_date ? <span> — effective {m.effective_date}</span> : null}
+    </div>
   );
 }
 
@@ -75,6 +88,9 @@ export function ResultsTable({ rs }: { rs: ResultsSummary }) {
           </Fragment>
         ))}
       </div>
+      {rs.takeaway && (
+        <div style={{ fontSize: 12.5, marginTop: 5 }}>{rs.takeaway}</div>
+      )}
       <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 5, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         {rs.ebitda_margin != null && <span className="num">EBITDA mgn {rs.ebitda_margin}%</span>}
         {rs.pat_margin != null && <span className="num">PAT mgn {rs.pat_margin}%</span>}
@@ -105,6 +121,7 @@ export function MustSeeCard({ item, h, onOpen, onOpenStock }: { item: DigestItem
             {item.score?.toFixed(1)}
           </span>
         </div>
+        {item.mgmt_change && <MgmtLine m={item.mgmt_change} />}
         {rs ? (
           <ResultsTable rs={rs} />
         ) : (
@@ -125,6 +142,17 @@ export function MustSeeCard({ item, h, onOpen, onOpenStock }: { item: DigestItem
         )}
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
           <Chip accent>{item.category}</Chip>
+          {item.mgmt_change?.lookup_url && (
+            <a
+              href={item.mgmt_change.lookup_url}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              style={{ fontSize: 12.5 }}
+            >
+              Look up background ↗
+            </a>
+          )}
           {item.mentions_results && onOpenStock && (
             <button
               className="chip"
@@ -350,7 +378,13 @@ export default function Briefing({ bySymbol, symbolFilter, clearFilter, onOpen, 
         ) : (
           <>
             <span className="num">{filtered?.total ?? 0}</span> filings →{" "}
-            <span className="num" style={{ color: "var(--accent)" }}>{filtered?.summary.must_see ?? 0}</span> must-see
+            {filtered?.summary.must_see ? (
+              <>
+                <span className="num" style={{ color: "var(--accent)" }}>{filtered.summary.must_see}</span> must-see
+              </>
+            ) : (
+              <span className="num" style={{ color: "var(--muted)" }}>0 must-see, quiet window</span>
+            )}
           </>
         )}
       </h1>

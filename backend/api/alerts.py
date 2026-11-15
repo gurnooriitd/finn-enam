@@ -60,30 +60,54 @@ def _on_results_day(symbol: str, date: str, conn) -> bool:
     return False
 
 
+def _data_as_of(conn) -> str:
+    """Demo clock: latest announcement or price date in the DB."""
+    a = conn.execute("SELECT MAX(ts_iso) FROM announcements").fetchone()[0] or ""
+    p = conn.execute("SELECT MAX(date) FROM prices").fetchone()[0] or ""
+    return max((a or "")[:10], (p or "")[:10])
+
+
 def _enrich(row, conn) -> dict:
     e = dict(row)
     e["company"] = company_name(e["symbol"])
     kind = e["kind"]
     if kind == "volume_ratio":
-        reason = f"Volume {e['value']}x 20-day average"
+        reason = f"Volume {e['value']}x 20-day avg"
     elif kind == "price_move":
         reason = f"Price {e['value']:+.1f}%"
     else:
-        cat = None
+        cat, summary, url = None, "", ""
         if e["announcement_id"]:
             r = conn.execute(
-                "SELECT category FROM announcements WHERE id=?", (e["announcement_id"],)
+                "SELECT category, voice_summary, subject, attachment_url "
+                "FROM announcements WHERE id=?",
+                (e["announcement_id"],),
             ).fetchone()
-            cat = r[0] if r else None
-        reason = CAT_LABELS.get(cat or "", "Announcement filed")
+            if r:
+                cat = r[0]
+                summary = (r[1] or r[2] or "").strip()
+                url = r[3] or ""
+        label = CAT_LABELS.get(cat or "", (cat or "Announcement filed").replace("_", " "))
+        reason = f"{label}: {summary[:110]}" if summary else label
+        e["summary"] = summary
+        e["attachment_url"] = url
     if kind in ("volume_ratio", "price_move"):
         pm = _price_move(e["symbol"], e["date"], conn)
         if pm is not None and abs(pm) >= 1 and kind == "volume_ratio":
             reason += f", price {pm:+.1f}%"
         if _on_results_day(e["symbol"], e["date"], conn):
-            reason += " on results day"
+            reason += " (results filed)"
     e["reason"] = reason
     return e
+
+
+def _recent_cutoff(conn) -> str:
+    """Only events within 30 days of data_as_of (demo clock)."""
+    try:
+        d = datetime.date.fromisoformat(_data_as_of(conn)[:10])
+    except (ValueError, TypeError):
+        return "0000-01-01"
+    return (d - datetime.timedelta(days=30)).isoformat()
 
 
 class RuleIn(BaseModel):
@@ -133,12 +157,12 @@ def update_rule(rule_id: int, rule: RuleIn):
 def list_events(symbol: str = "", limit: int = 100):
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    q = "SELECT * FROM alert_events"
-    params = []
+    q = "SELECT * FROM alert_events WHERE date>=?"
+    params = [_recent_cutoff(conn)]
     if symbol:
-        q += " WHERE symbol=?"
+        q += " AND symbol=?"
         params.append(symbol.upper())
-    q += " ORDER BY fired_at DESC LIMIT ?"
+    q += " ORDER BY date DESC, id DESC LIMIT ?"
     params.append(limit)
     rows = conn.execute(q, params).fetchall()
     out = [_enrich(r, conn) for r in rows]
@@ -161,7 +185,9 @@ def dry_run():
     events = conn.execute(
         """SELECT e.*, r.kind, r.threshold, r.categories
            FROM alert_events e JOIN alert_rules r ON e.rule_id=r.id
-           ORDER BY e.fired_at DESC LIMIT 200"""
+           WHERE e.date>=?
+           ORDER BY e.date DESC, e.id DESC LIMIT 200""",
+        [_recent_cutoff(conn)],
     ).fetchall()
     enriched = [_enrich(e, conn) for e in events]
     conn.close()

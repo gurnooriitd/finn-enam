@@ -176,6 +176,15 @@ def results_summary(symbol: str, ts_iso: str, texts: list[str], conn: sqlite3.Co
         _pct_margin(ebitda, revenue))
     pat_margin = _pct_margin(pat, revenue)
 
+    # Same quarter last year (for the deterministic takeaway line).
+    yoy_label = _shift(shown, 12)
+    yq = quarters.get(yoy_label or "", {})
+    yoy_rev = next((yq[k] for k in REVENUE_METRICS if k in yq), None)
+    opm_yoy = yq.get("OPM %")
+    ebitda_margin_yoy = round(opm_yoy, 1) if opm_yoy is not None else (
+        _pct_margin(yq.get(EBITDA), yoy_rev))
+    pat_margin_yoy = _pct_margin(yq.get(PAT), yoy_rev)
+
     if is_bank:
         note = (note + "; " if note else "") + "EBITDA n/a for banks/NBFCs"
 
@@ -187,9 +196,36 @@ def results_summary(symbol: str, ts_iso: str, texts: list[str], conn: sqlite3.Co
         "rows": rows,
         "ebitda_margin": ebitda_margin,
         "pat_margin": pat_margin,
+        "ebitda_margin_yoy": ebitda_margin_yoy,
+        "pat_margin_yoy": pat_margin_yoy,
+        "takeaway": _takeaway(rows, ebitda_margin, ebitda_margin_yoy),
         "note": note,
         "available": True,
     }
+
+
+def _takeaway(rows: list[dict], ebitda_margin, ebitda_margin_yoy) -> str:
+    """One rule-based line, e.g. 'Revenue +14.8% YoY, PAT +16.0% YoY;
+    EBITDA margin contracted 1.2pp vs last year'."""
+    segs = []
+    by = {r["metric"]: r for r in rows}
+    for label, key in (("Revenue", "Revenue"), ("PAT", "PAT")):
+        r = by.get(key)
+        if not r:
+            continue
+        if r["yoy_pct"] is not None:
+            segs.append(f"{label} {r['yoy_pct']:+.1f}% YoY")
+        elif r["qoq_pct"] is not None:
+            segs.append(f"{label} {r['qoq_pct']:+.1f}% QoQ")
+    if ebitda_margin is not None and ebitda_margin_yoy is not None:
+        d = round(ebitda_margin - ebitda_margin_yoy, 1)
+        if d > 0.3:
+            segs.append(f"EBITDA margin expanded {abs(d):.1f}pp vs last year")
+        elif d < -0.3:
+            segs.append(f"EBITDA margin contracted {abs(d):.1f}pp vs last year")
+        else:
+            segs.append("EBITDA margin flat vs last year")
+    return ", ".join(segs)
 
 
 def _pct_margin(part: float | None, whole: float | None) -> float | None:

@@ -110,6 +110,7 @@ def get_portfolio(since: str = ""):
         pf = json.loads(PORTFOLIO_PATH.read_text())
     except Exception:
         pf = {"holdings": []}
+    weights = {h["symbol"]: h.get("weight") for h in pf.get("holdings", [])}
     symbols = [h["symbol"] for h in pf.get("holdings", [])]
 
     conn = sqlite3.connect(DB_PATH)
@@ -122,7 +123,8 @@ def get_portfolio(since: str = ""):
         ).fetchall()
         if not rows:
             out.append({"symbol": sym, "name": sym, "last_close": None, "day_pct": None,
-                        "volume_ratio": None, "spark": [], "unseen_filings": 0})
+                        "volume_ratio": None, "weight": weights.get(sym),
+                        "spark": [], "unseen_filings": 0})
             continue
         last_close = rows[0]["close"]
         day_pct = ((rows[0]["close"] - rows[1]["close"]) / rows[1]["close"] * 100
@@ -163,11 +165,17 @@ def get_portfolio(since: str = ""):
             "last_close": round(last_close, 2),
             "day_pct": round(day_pct, 2) if day_pct is not None else None,
             "volume_ratio": round(vol_ratio, 2) if vol_ratio is not None else None,
+            "weight": weights.get(sym),
             "spark": [round(r["close"], 2) for r in reversed(rows)],
             "unseen_filings": n_ann,
         })
     conn.close()
-    return {"synthetic": pf.get("synthetic", True), "note": pf.get("note", ""), "holdings": out}
+    return {
+        "synthetic": pf.get("synthetic", True),
+        "note": pf.get("note", ""),
+        "data_as_of": as_of_day,
+        "holdings": out,
+    }
 
 
 _dist = Path(__file__).parent.parent / "web" / "dist"
