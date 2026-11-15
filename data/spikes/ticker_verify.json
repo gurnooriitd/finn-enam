@@ -1,0 +1,92 @@
+{
+  "RELIANCE": {
+    "status": "OK",
+    "ticker": "RELIANCE.NS",
+    "last_close": 1339.7
+  },
+  "TCS": {
+    "status": "OK",
+    "ticker": "TCS.NS",
+    "last_close": 2407.5
+  },
+  "HDFCBANK": {
+    "status": "OK",
+    "ticker": "HDFCBANK.NS",
+    "last_close": 804.0
+  },
+  "ICICIBANK": {
+    "status": "OK",
+    "ticker": "ICICIBANK.NS",
+    "last_close": 1583.6
+  },
+  "SUNPHARMA": {
+    "status": "OK",
+    "ticker": "SUNPHARMA.NS",
+    "last_close": 1880.0
+  },
+  "LT": {
+    "status": "OK",
+    "ticker": "LT.NS",
+    "last_close": 4143.8
+  },
+  "MARUTI": {
+    "status": "OK",
+    "ticker": "MARUTI.NS",
+    "last_close": 12854.0
+  },
+  "TITAN": {
+    "status": "OK",
+    "ticker": "TITAN.NS",
+    "last_close": 4844.9
+  },
+  "ITC": {
+    "status": "OK",
+    "ticker": "ITC.NS",
+    "last_close": 285.0
+  },
+  "BAJFINANCE": {
+    "status": "OK",
+    "ticker": "BAJFINANCE.NS",
+    "last_close": 1117.0
+  },
+  "ETERNAL": {
+    "status": "OK",
+    "ticker": "ETERNAL.NS",
+    "last_close": 363.65
+  },
+  "DIXON": {
+    "status": "OK",
+    "ticker": "DIXON.NS",
+    "last_close": 12798.0
+  },
+  "POLYCAB": {
+    "status": "OK",
+    "ticker": "POLYCAB.NS",
+    "last_close": 7904.0
+  },
+  "HAL": {
+    "status": "OK",
+    "ticker": "HAL.NS",
+    "last_close": 4809.8
+  },
+  "SUZLON": {
+    "status": "OK",
+    "ticker": "SUZLON.NS",
+    "last_close": 38.25
+  },
+  "TATASTEEL": {
+    "status": "OK",
+    "ticker": "TATASTEEL.NS",
+    "last_close": 186.68
+  },
+  "ADANIPORTS": {
+    "status": "OK",
+    "ticker": "ADANIPORTS.NS",
+    "last_close": 1903.3
+  },
+  "YESBANK": {
+    "status": "OK",
+    "ticker": "YESBANK.NS",
+    "last_close": 17.42
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "RELIANCE": {
+    "status": "ERROR",
+    "error": "Failed to perform, curl: (6) Could not resolve host: query2.finance.yahoo.com (Could not contact DNS servers). See https://curl.se/libcurl/c/libcurl-errors.html first for more details."
+  },
+  "TCS": {
+    "status": "ERROR",
+    "error": "Failed to perform, curl: (6) Could not resolve host: query2.finance.yahoo.com (Could not contact DNS servers). See https://curl.se/libcurl/c/libcurl-errors.html first for more details."
+  },
+  "ETERNAL": {
+    "status": "BLOCKED",
+    "error": "empty on both .NS and .BO"
+  }
+}

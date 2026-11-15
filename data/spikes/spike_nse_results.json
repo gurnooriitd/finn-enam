@@ -1,0 +1,9 @@
+{
+  "nse_ann_requests_RELIANCE": "OK",
+  "nse_ann_requests_TCS": "OK",
+  "nse_ann_curl_RELIANCE": "OK",
+  "nse_ann_curl_TCS": "OK",
+  "nse_ann_curl_ETERNAL": "OK",
+  "nse_results_RELIANCE": "OK",
+  "nse_results_TCS": "OK"
+}

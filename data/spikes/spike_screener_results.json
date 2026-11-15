@@ -1,0 +1,11 @@
+{
+  "screener_quarterly_RELIANCE": "OK (10 rows)",
+  "screener_docs_RELIANCE": "OK (85 ARs, 0 concalls)",
+  "screener_quarterly_TCS": "OK (10 rows)",
+  "screener_docs_TCS": "OK (77 ARs, 0 concalls)",
+  "screener_quarterly_INFY": "OK (10 rows)",
+  "screener_docs_INFY": "OK (66 ARs, 0 concalls)",
+  "pdf_AR_RELIANCE": "FAIL: HTTP 403, content-type: text/html",
+  "pdf_AR_TCS": "FAIL: HTTP 403, content-type: text/html",
+  "pdf_AR_INFY": "FAIL: HTTP 403, content-type: text/html"
+}
