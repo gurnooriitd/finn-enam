@@ -34,10 +34,48 @@ app.include_router(costs_router, prefix="/api")
 
 @app.get("/health")
 def health():
+    from backend.config import FINN_MODE, LLM_ENABLED
     return {
         "status": "ok",
+        "mode": FINN_MODE,
+        "llm_enabled": LLM_ENABLED,
         "ts": datetime.datetime.utcnow().isoformat(),
     }
+
+
+@app.post("/api/refresh")
+def refresh():
+    """Live data refresh. Disabled in snapshot mode (hosted demo)."""
+    import sqlite3
+    from backend.config import FINN_MODE, DB_PATH
+
+    conn = sqlite3.connect(DB_PATH)
+    as_of = conn.execute("SELECT MAX(ts_iso) FROM announcements").fetchone()[0]
+    conn.close()
+
+    if FINN_MODE == "snapshot":
+        return {
+            "status": "snapshot",
+            "refreshed": False,
+            "message": f"live refresh disabled in hosted demo, data as of {as_of}",
+        }
+
+    try:
+        from backend.ingest.prices import run as prices_run
+        from backend.ingest.nse import run as nse_run
+        from backend.push.classify import run_classify_all
+        from backend.push.priority import run_score_all
+        from backend.push.alerts_scan import scan_alerts
+        from backend.config import PORTFOLIO_TICKERS
+
+        prices_run(PORTFOLIO_TICKERS)
+        nse_run(PORTFOLIO_TICKERS, days=30)
+        run_classify_all(force=True)
+        run_score_all()
+        scan_alerts()
+        return {"status": "ok", "refreshed": True, "message": f"refresh complete, data as of {as_of}"}
+    except Exception as e:
+        return {"status": "error", "refreshed": False, "message": f"refresh failed: {e}; data as of {as_of}"}
 
 
 @app.get("/api/portfolio")

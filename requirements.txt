@@ -1,0 +1,8 @@
+# Runtime deps for the snapshot-mode app (Docker / hosted demo).
+# Excluded (build-time / local-refresh only): yfinance, beautifulsoup4,
+# lxml, pandas, numpy, PyMuPDF — ingest runs locally, never in the container.
+fastapi==0.163.0
+uvicorn==0.54.0
+pydantic==2.14.3
+python-dotenv==1.2.4
+requests==2.34.2

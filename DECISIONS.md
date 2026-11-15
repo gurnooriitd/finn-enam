@@ -59,3 +59,25 @@ GET /api/portfolio?since=ISO returns per stock: name (parsed from cached screene
 
 ### D-14: Frontend stack choices
 Vite + React + TS + Tailwind v4 (@tailwindcss/vite), no router (tab state), no chart lib (hand-rolled SVG sparklines), IBM Plex Sans/Mono via Google Fonts, dark default with light via prefers-color-scheme. Priority encoded as left-rail colour + card size, not badges. auto-widen: empty window escalates 24h→3d→7d→30d with a visible note. dist/ committed (snapshot-first deploy: FastAPI serves web/dist at "/" via StaticFiles, API stays under /api).
+
+## Freshness + push fixes — 2026-11-15
+
+### D-15: Date-ranged NSE cache keys include the date range
+Old key `ann_{sym}_{days}d` served 6h-cached data for a *new* 30-day window forever. Keys are now `ann_{sym}_{from}_{to}`: a new range always re-fetches; only same-day re-runs reuse. Prices: deleted raw CSVs to force the re-pull (one-off; 6h TTL kept).
+
+### D-16: ts_iso column — NSE ts doesn't sort
+`ts` is "DD-Mon-YYYY HH:MM:SS"; string-comparing it against ISO cutoffs silently broke every window filter and the anomaly join. Added `ts_iso` (migrated + backfilled in init_db), digest/alerts filter on it, windows anchored to real now, and `/api/digest` returns `data_as_of` (latest announcement/price). Real max ts was 13-Nov (string MAX said 01-Nov — lexical trap).
+
+### D-17: Classifier is subject-first; body/voiceSummary demoted to last resort
+Old code substring-matched NSE_DESC_MAP over the filing *body*, so "board meeting"→results fired on 39 false positives and desc/subject got swapped. Now: ordered SUBJECT_RULES on the subject line (NSE desc IS the subject) → body keywords → voice summary. KEYWORD_RULES has no results pattern by design — "results" in a summary can never classify a filing. "Outcome of Board Meeting" checks the body for "financial result" (NSE subjects are terse). Meets/calls: investor_meetings by default, earnings_call on transcript/audio/schedule. "General Updates" stays unclassified. Reclassified all 231 (before: 84 unclassified/55 investor/39 results(false)/13 earnings…; after: 77/68/21/14/11/11/9/8/5/4/4 — results now 14 *real* filings).
+
+### D-18: Digest = clusters + relative tiering, not stored tiers
+Same company+category within 24h collapses into one item (lead = highest-scored child; ties: category base, then recency); `child_count`/`children` in the API, "xN" chip expands in the UI. Tiers computed per request within the window: must-see = top 15% of clusters (min 3, max 10, ≤3 per company), worth-a-look = next 25%, rest routine. Replaces static score thresholds (D-11) which didn't scale across window sizes. Per-filing price context (day %, vol ratio) now computed at the filing's date — after-close filings use the next trading day, missing data renders nothing (was: latest-day price for every item, and a silently-broken date join).
+
+### D-19: Alerts UX — grouped, 7-day unread
+Category alerts group to one row per company per day (expandable); unread badge counts only unseen events fired in the last 7 days. App capped at 480px centered with neutral surround ≥520px (sheet included). Untracked data/finn.db now committed (snapshot-first deploy needs it); WAL checkpointed.
+
+## Deploy — 2026-11-15
+
+### D-20: FINN_MODE=snapshot; runtime-only requirements; single container
+`FINN_MODE=snapshot` (Dockerfile default) forces LLM_ENABLED=0 and makes POST /api/refresh return "live refresh disabled in hosted demo, data as of <date>" instead of touching NSE/screener. requirements.txt pins runtime-only deps (fastapi, uvicorn, pydantic, python-dotenv, requests); excluded yfinance, beautifulsoup4, lxml, pandas, numpy, PyMuPDF — they're local-refresh-only and never imported at app runtime (verified: fresh venv, 20 packages, all endpoints + /health + / + gated /api/refresh OK with no .env). Docker: python:3.12-slim, copies backend + data/finn.db + portfolio.json + web/dist; DB auto-copies to a temp path if FS is read-only. Docker not installed locally — verified via venv only. README + DEPLOY.md (Render free tier + HF Spaces) written.
