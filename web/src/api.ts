@@ -142,6 +142,59 @@ export interface PortfolioResp {
   holdings: Holding[];
 }
 
+export interface ResearchSymbols {
+  portfolio: string[];
+  more: string[];
+}
+
+export interface DossierTile {
+  label: string;
+  value: number | null;
+  period: string | null;
+  unit: string;
+  pct?: boolean;
+  spark: number[];
+  spark_labels: string[];
+  note?: string;
+}
+
+export interface SeriesPt {
+  p: string;
+  v: number | null;
+}
+
+export interface Dossier {
+  symbol: string;
+  name?: string;
+  available?: boolean;
+  is_bank?: boolean;
+  as_of?: string;
+  unit?: string;
+  snapshot?: DossierTile[];
+  trajectory?: {
+    sales: SeriesPt[];
+    profit: SeriesPt[];
+    margin: SeriesPt[];
+    sales_cagr: number | null;
+    profit_cagr: number | null;
+  };
+  balance?: {
+    borrowings: SeriesPt[];
+    de: number | null;
+    days: { debtor: { value: number | null; period: string | null }; inventory: { value: number | null; period: string | null }; payable: { value: number | null; period: string | null } };
+    note?: string;
+  };
+  cash?: {
+    years: { p: string; cfo: number | null; profit: number | null; ratio: number | null }[];
+    cum_cfo: number | null;
+    cum_profit: number | null;
+    cum_ratio: number | null;
+    flag: boolean;
+    note?: string;
+  };
+  note?: string;
+}
+
 async function getJSON<T>(url: string): Promise<T> {
   const r = await fetch(url);
   if (!r.ok) throw new Error(`${r.status} ${url}`);
@@ -160,6 +213,8 @@ export const api = {
   events: (limit = 100) => getJSON<AlertEvent[]>(`/api/alerts/events?limit=${limit}`),
   dryrun: () => getJSON<{ total_would_fire: number; events: AlertEvent[] }>("/api/alerts/dryrun"),
   portfolio: () => getJSON<PortfolioResp>("/api/portfolio"),
+  researchSymbols: () => getJSON<ResearchSymbols>("/api/research"),
+  dossier: (symbol: string) => getJSON<Dossier>(`/api/research/${symbol}`),
   updateRule: (id: number, body: Partial<Rule>) =>
     fetch(`/api/alerts/rules/${id}`, {
       method: "PUT",

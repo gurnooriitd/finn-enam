@@ -11,6 +11,7 @@ from backend.db import init_db
 from backend.api.digest import router as digest_router
 from backend.api.alerts import router as alerts_router
 from backend.api.costs import router as costs_router
+from backend.api.research import router as research_router
 
 app = FastAPI(title="FINN", version="0.1.0")
 
@@ -30,6 +31,7 @@ def startup():
 app.include_router(digest_router, prefix="/api")
 app.include_router(alerts_router, prefix="/api")
 app.include_router(costs_router, prefix="/api")
+app.include_router(research_router, prefix="/api/research")
 
 
 @app.get("/health")
