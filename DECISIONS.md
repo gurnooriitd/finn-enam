@@ -137,3 +137,8 @@ For ANY ticker: ensure screener page (existing ingest, cached) -> pick latest 2 
 
 ### D-34: One strong-model pass, then drop any line whose citation was not in the prompt
 `scripts/pull_narrative.py` retrieves a handful of annual-report and concall chunks per company (BM25, no embeddings) plus the last few screener years, and asks the strong model for a business description and a bull and a bear. A line is stored only if its `chunk_id` was in that prompt, or `tables` when the sentence is a figure we computed. If the model returns no usable business sentence, the API shows one annual-report overview excerpt unchanged instead of writing one. Hosted mode still has `LLM_ENABLED=0`; this table is read, not regenerated. Spot-check: Dixon's "OEM & ODM" line is `AR-FY25-p46`; the sales 12,192 to 48,873 cr line cites `tables` and matches `screener_fundamentals`.
+
+## Submission polish — 2026-11-15
+
+### D-35: The filing sheet stays inside the phone column; Ask cites or it is dropped
+On a wide window the detail sheet was `position: fixed` against the browser viewport, so it sat beside the 480px column. It is now `position: absolute` inside `.app-shell`, which is the phone frame. Ask calls the strong model only when `FINN_MODE` is not snapshot and a key is set. Each sentence must contain a `chunk_id` that was in the retrieved set (a full header that includes the id still counts). Snapshot deploy keeps showing the pages and does not call out. Spot-check: HAL “revenue growth” returns the Q4 FY26 10–12% line tagged `CONCALL-Q4FY26-p8` and the earlier 7–8% line tagged `CONCALL-Q2FY23-p17`.

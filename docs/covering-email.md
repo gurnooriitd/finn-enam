@@ -11,11 +11,11 @@ The hosted app serves a snapshot. NSE and screener block datacenter IPs, so the 
 
 Numbers are computed. Classification is rules on the filing subject. Results cards and the financial dossier come from screener’s standardised tables. EBITDA on a results card is derived and labelled when it is derived. A figure that fails a check is shown as unverified, not hidden.
 
-The model is used once, offline, and then checked. Guidance extraction keeps a sentence only if the quote is actually in the cited transcript page. The target number is parsed from that quote, not taken from the model. The verdict (delivered, partly, missed, pending, can’t verify) is arithmetic against one screener column. Beating a growth range counts as delivered. A margin above the guided band stays “partly”, because screener’s operating margin is often a different line, and the card says so. Constant-currency guidance is shown and not scored. Business and bull/bear lines are dropped if they do not cite a chunk that was in the prompt. Ask-the-filings returns those pages and does not write an answer.
+The model is used offline, and then checked. Guidance extraction keeps a sentence only if the quote is actually in the cited transcript page. The target number is parsed from that quote, not taken from the model. The verdict (delivered, partly, missed, pending, can’t verify) is arithmetic against one screener column. Beating a growth range counts as delivered. A margin above the guided band stays “partly”, because screener’s operating margin is often a different line, and the card says so. Constant-currency guidance is shown and not scored. Business and bull/bear lines are dropped if they do not cite a chunk that was in the prompt. On the hosted app, Ask shows the matching annual-report and concall pages. The same route can write a short answer when an API key is present, and any sentence that does not cite one of those pages is dropped. The hosted container has no key, so it does not make that call.
 
 What I left out
 
-A generated answer to a free-text question, voice, Telegram, and commentary on the cash and balance-sheet charts. Those charts are already computed. A model paragraph on top of them would have been the expensive, less reliable part.
+Voice, Telegram, and commentary on the cash and balance-sheet charts. Those charts are already computed. A model paragraph on top of them would have been the expensive, less reliable part.
 
 Cost
 

@@ -60,15 +60,16 @@ with **no external network and no API keys** (`FINN_MODE=snapshot`).
 - **Research dossier**: financial snapshot, trajectory, balance sheet and cash
   quality computed from screener tables. Promised vs Delivered checks concall
   quotes against those tables. Business and bull/bear lines are pre-extracted
-  and each one cites a filing chunk. Ask-the-filings returns the matching
-  pages and does not write an answer.
+  and each one cites a filing chunk. Ask shows those pages. With an API key it
+  also writes a short answer and drops any sentence that does not cite a
+  retrieved page. The hosted snapshot has no key, so it shows the pages only.
 - **Cost ledger + `/api/costs`**. The hosted app does not call a model
   (`LLM_ENABLED=0`); extraction was done once locally and cached in the snapshot.
 - **Snapshot-first deploy**: `Dockerfile`, `.dockerignore`, `DEPLOY.md`.
 
 ## What is deliberately not built
 
-- A generated answer to a free-text question, and section-by-section streaming.
+- Section-by-section streaming. Ask on the hosted snapshot shows the pages.
 - Voice input, Telegram or web-push delivery, natural-language alert creation.
 - Written commentary on the trajectory, balance-sheet and cash charts. Those stay computed.
 

@@ -263,6 +263,7 @@ export interface AskResp {
   symbol: string;
   question: string;
   hits: AskHit[];
+  answer?: { text: string; chunk_id: string }[];
   note: string;
 }
 

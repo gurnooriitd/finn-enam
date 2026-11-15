@@ -56,9 +56,12 @@ body {
   max-width: 480px;
   margin: 0 auto;
   background: var(--bg);
+  position: relative;
+  overflow: hidden;
 }
 
-/* Neutral surround on screens wider than the app */
+/* On a wide screen the app stays one phone column. The filing sheet is
+   positioned inside that column, so it cannot sit beside the list. */
 @media (min-width: 520px) {
   body {
     background: color-mix(in srgb, var(--bg) 62%, #808080);
@@ -66,14 +69,6 @@ body {
   .app-shell {
     border-left: 1px solid var(--line);
     border-right: 1px solid var(--line);
-  }
-  .sheet,
-  .sheet-overlay {
-    max-width: 480px;
-  }
-  .sheet {
-    left: 50%;
-    translate: -50% 0; /* separate from transform so slideUp keeps working */
   }
 }
 
@@ -179,16 +174,16 @@ body {
 }
 
 .sheet-overlay {
-  position: fixed;
+  position: absolute;
   inset: 0;
   background: rgba(0,0,0,0.55);
   z-index: 40;
 }
 
 .sheet {
-  position: fixed;
+  position: absolute;
   left: 0; right: 0; bottom: 0;
-  max-height: 82dvh;
+  max-height: 82%;
   background: var(--surface);
   border-top: 1px solid var(--line);
   border-radius: 16px 16px 0 0;

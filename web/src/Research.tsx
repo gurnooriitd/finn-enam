@@ -124,6 +124,7 @@ export default function Research() {
   const [error, setError] = useState<string | null>(null);
   const [askQ, setAskQ] = useState("");
   const [askHits, setAskHits] = useState<AskHit[] | null>(null);
+  const [askAnswer, setAskAnswer] = useState<{ text: string; chunk_id: string }[]>([]);
   const [askNote, setAskNote] = useState("");
   const [asking, setAsking] = useState(false);
 
@@ -143,6 +144,7 @@ export default function Research() {
     setPromised(null);
     setNarrative(null);
     setAskHits(null);
+    setAskAnswer([]);
     setAskNote("");
     api.dossier(symbol)
       .then(setD)
@@ -157,7 +159,7 @@ export default function Research() {
     if (q.length < 3 || !symbol) return;
     setAsking(true);
     api.ask(symbol, q)
-      .then((r) => { setAskHits(r.hits); setAskNote(r.note); })
+      .then((r) => { setAskHits(r.hits); setAskAnswer(r.answer || []); setAskNote(r.note); })
       .catch((e) => { setAskHits([]); setAskNote(String(e)); })
       .finally(() => setAsking(false));
   };
@@ -315,7 +317,7 @@ export default function Research() {
             {d.cash.note && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 8 }}>{d.cash.note}</div>}
           </Section>
 
-          <Section title="Ask the filings" tip="Search this company's annual report and concall transcripts. You get the pages, not a generated answer, so nothing is added that the filing did not say.">
+          <Section title="Ask the filings" tip="The answer may only use this company's annual report and concall pages. Anything that cannot cite one of those pages is dropped.">
             <form onSubmit={(e) => { e.preventDefault(); submitAsk(); }} style={{ display: "flex", gap: 8 }}>
               <input
                 value={askQ}
@@ -332,6 +334,16 @@ export default function Research() {
               </button>
             </form>
             {askNote && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 8 }}>{askNote}</div>}
+            {askAnswer.length > 0 && (
+              <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+                {askAnswer.map((line) => (
+                  <p key={line.chunk_id + line.text.slice(0, 24)} style={{ margin: 0, fontSize: 14, lineHeight: 1.45 }}>
+                    {line.text}{" "}
+                    <span className="chip" style={{ color: "var(--info)" }}>{line.chunk_id}</span>
+                  </p>
+                ))}
+              </div>
+            )}
             {askHits && askHits.length === 0 && <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 8 }}>No matching excerpt.</div>}
             <div style={{ display: "grid", gap: 8, marginTop: askHits && askHits.length ? 10 : 0 }}>
               {askHits?.map((h) => (

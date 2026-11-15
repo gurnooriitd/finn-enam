@@ -9,8 +9,9 @@ import re
 import sqlite3
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
-from backend.config import DB_PATH, PORTFOLIO_PATH, RAW_DIR
+from backend.config import DB_PATH, FINN_MODE, LLM_API_KEY, PORTFOLIO_PATH, RAW_DIR
 from backend.pull.narrative import narrative_for
 from backend.pull.promised import corpus_symbols, promised_for
 from backend.pull.retrieve import retrieve
@@ -254,28 +255,94 @@ def narrative(symbol: str):
     return narrative_for(symbol)
 
 
+class _AskLine(BaseModel):
+    text: str
+    chunk_id: str
+
+
+class _AskAnswer(BaseModel):
+    sentences: list[_AskLine] = Field(default_factory=list)
+
+
+_ASK_SYSTEM = (
+    "Answer the question using only the excerpts. You have no other knowledge of this company. "
+    "Every sentence's chunk_id must be copied from an excerpt id. "
+    "Do not state a number that is not in the excerpt you cite. "
+    "If the excerpts do not contain the answer, return {\"sentences\": []}. "
+    "At most 4 short sentences."
+)
+
+
+def _chunk_text(symbol: str, ids: list[str]) -> dict[str, str]:
+    if not ids:
+        return {}
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        q = ",".join("?" * len(ids))
+        rows = conn.execute(
+            f"SELECT chunk_id, text FROM doc_chunks WHERE symbol=? AND chunk_id IN ({q})",
+            (symbol, *ids),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    finally:
+        conn.close()
+    return {r[0]: re.sub(r"\s+", " ", r[1] or "").strip() for r in rows}
+
+
+def _answer_from_hits(symbol: str, question: str, hits: list[dict]) -> tuple[list[dict], str]:
+    allowed = {h["chunk_id"] for h in hits}
+    if FINN_MODE == "snapshot" or not LLM_API_KEY:
+        return [], "Pages from the filings. A written answer needs the model, which is off in this copy."
+    fuller = _chunk_text(symbol, [h["chunk_id"] for h in hits])
+    blocks = []
+    for h in hits:
+        text = fuller.get(h["chunk_id"]) or h["text"]
+        blocks.append(f"[{h['chunk_id']} p.{h.get('page')} {h.get('doc_kind')} {h.get('period')}]\n{text[:1600]}")
+    try:
+        from backend.llm.gateway import call_llm
+        parsed = call_llm(
+            [
+                {"role": "system", "content": _ASK_SYSTEM},
+                {"role": "user", "content": f"{symbol}: {question}\n\n" + "\n\n".join(blocks)},
+            ],
+            tier="strong",
+            step="ask",
+            response_schema=_AskAnswer,
+        )
+    except Exception:
+        return [], "The pages are below. A written answer could not be produced from them."
+    kept = []
+    for line in parsed.sentences:
+        raw = (line.chunk_id or "").strip().strip("[]")
+        cid = raw if raw in allowed else next((a for a in allowed if a in raw), "")
+        text = re.sub(r"\s+", " ", line.text or "").strip()
+        if cid and len(text.split()) >= 4:
+            kept.append({"text": text, "chunk_id": cid})
+    if not kept:
+        return [], "Not disclosed in the retrieved pages."
+    return kept[:4], "Answered only from the pages below. A sentence without a real page id was dropped."
+
+
 @router.get("/{symbol}/ask")
 def ask(symbol: str, q: str = ""):
-    """Excerpts only. No generated answer, so the snapshot app cannot invent a claim."""
+    """Answer from this company's filings only. Uncited sentences are dropped."""
     symbol = symbol.upper()
     if not re.fullmatch(r"[A-Z0-9.&-]{1,20}", symbol):
         raise HTTPException(400, "bad symbol")
     question = (q or "").strip()
     if len(question) < 3:
         raise HTTPException(400, "ask a longer question")
-    hits = retrieve(symbol, question, k=3)
+    hits = retrieve(symbol, question, k=5)
     if not hits:
         return {
-            "symbol": symbol,
-            "question": question,
-            "hits": [],
+            "symbol": symbol, "question": question, "hits": [], "answer": [],
             "note": "No annual-report or concall excerpts are loaded for this ticker.",
         }
+    answer, note = _answer_from_hits(symbol, question, hits)
     return {
-        "symbol": symbol,
-        "question": question,
-        "hits": hits,
-        "note": "Excerpts from this company's annual report and concall transcripts. Not a generated answer.",
+        "symbol": symbol, "question": question, "hits": hits,
+        "answer": answer, "note": note,
     }
 
 
