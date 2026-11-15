@@ -3,7 +3,8 @@ API — Digest
 GET /api/digest?window=7d&group_by=priority&symbol=&category=
 Returns tiered, CLUSTERED announcements with score breakdowns.
 
-- Window is anchored to the real current time (not the latest data date).
+- Window is anchored to data_as_of (demo clock): "24h" = the 24h ending at
+  the end of the latest data day, not the real current time.
 - Filings of the same company + category within 24h collapse into one
   cluster led by its highest-scored child.
 - Tiers are assigned by relative rank within the window:
@@ -25,14 +26,21 @@ from backend.push.context import price_context
 router = APIRouter()
 
 
-def _parse_window(window: str) -> datetime.datetime:
-    """Convert '24h', '3d', '7d' to a cutoff datetime anchored to now."""
+def _parse_window(window: str) -> datetime.timedelta:
+    """Convert '24h', '3d', '7d' to a window length."""
     m = re.match(r"(\d+)([hd])", window)
     if m:
         n, unit = int(m.group(1)), m.group(2)
-        delta = datetime.timedelta(hours=n) if unit == "h" else datetime.timedelta(days=n)
-        return datetime.datetime.now() - delta
-    return datetime.datetime.now() - datetime.timedelta(days=1)
+        return datetime.timedelta(hours=n) if unit == "h" else datetime.timedelta(days=n)
+    return datetime.timedelta(days=1)
+
+
+# Bodies that mention results — such filings must never show a bare subject.
+RESULTS_BODY_RE = re.compile(
+    r"financial results|results for the (?:quarter|half year|year|period)|"
+    r"(?:quarter|half year|year) ended|\bresults\b.*\b(?:quarter|fiscal|fy)\b",
+    re.I,
+)
 
 
 def _cluster(rows: list) -> list[dict]:
@@ -95,6 +103,11 @@ def _assign_tiers(clusters: list[dict]) -> None:
         else:
             c["tier"] = "routine"
 
+    # No content (no voice summary) -> never must-see/worth-a-look.
+    for c in clusters:
+        if c["tier"] != "routine" and not (c["lead"].get("voice_summary") or "").strip():
+            c["tier"] = "routine"
+
 
 @router.get("/digest")
 def get_digest(
@@ -104,14 +117,22 @@ def get_digest(
     portfolio_only: bool = Query(False),
     group_by: str = Query("priority", description="priority | company"),
 ):
-    cutoff = _parse_window(window)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
 
+    # Demo clock: anchor the window to data_as_of, not real now.
+    as_of = conn.execute("SELECT MAX(ts_iso) FROM announcements").fetchone()[0]
+    last_price = conn.execute("SELECT MAX(date) FROM prices").fetchone()[0]
+    if last_price and (not as_of or last_price > as_of[:10]):
+        as_of = last_price
+    as_of_day = (as_of or datetime.date.today().isoformat())[:10]
+    anchor_end = datetime.datetime.fromisoformat(as_of_day + "T23:59:59")
+    cutoff = anchor_end - _parse_window(window)
+
     query = """
         SELECT a.id, a.symbol, a.ts, a.ts_iso, a.subject, a.voice_summary,
-               a.attachment_url, a.category, a.priority_tier, a.priority_score,
-               a.score_breakdown
+               a.raw_desc, a.attachment_url, a.category, a.priority_tier,
+               a.priority_score, a.score_breakdown
         FROM announcements a
         WHERE a.ts_iso >= ?
     """
@@ -131,12 +152,6 @@ def get_digest(
 
     query += " ORDER BY a.ts_iso ASC"
     rows = conn.execute(query, params).fetchall()
-
-    # data_as_of: latest announcement / price timestamp in the DB
-    as_of = conn.execute("SELECT MAX(ts_iso) FROM announcements").fetchone()[0]
-    last_price = conn.execute("SELECT MAX(date) FROM prices").fetchone()[0]
-    if last_price and (not as_of or last_price > as_of[:10]):
-        as_of = last_price
 
     clusters = _cluster(rows)
     for c in clusters:
@@ -158,6 +173,25 @@ def get_digest(
 
     def cluster_payload(c: dict) -> dict:
         lead = c["lead"]
+        vs = (lead["voice_summary"] or "").strip()
+        mentions_results = c["category"] != "results" and bool(RESULTS_BODY_RE.search(vs or lead["subject"] or ""))
+        if c["category"] == "results":
+            headline = vs or "Financial results filed"
+        elif mentions_results:
+            headline = "Financial results filed — see results card"
+        else:
+            headline = vs or lead["subject"]
+        rs = None
+        if c["category"] == "results":
+            from backend.push.results_summary import results_summary
+            try:
+                rs = results_summary(
+                    c["symbol"], lead["ts_iso"] or "",
+                    [lead["voice_summary"] or "", lead.get("raw_desc") or "", lead["subject"] or ""],
+                    conn,
+                )
+            except Exception:
+                rs = None
         return {
             "id": lead["id"],
             "symbol": c["symbol"],
@@ -165,6 +199,9 @@ def get_digest(
             "ts_iso": lead["ts_iso"],
             "subject": lead["subject"],
             "voice_summary": lead["voice_summary"],
+            "headline": headline,
+            "mentions_results": mentions_results,
+            "results_summary": rs,
             "attachment_url": lead["attachment_url"],
             "category": c["category"],
             "score": lead["score"],
@@ -214,6 +251,7 @@ def get_digest(
     return {
         "window": window,
         "cutoff": cutoff.isoformat(),
+        "anchor_end": anchor_end.isoformat(),
         "data_as_of": as_of,
         "total": len(rows),
         "summary": {

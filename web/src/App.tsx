@@ -22,13 +22,17 @@ export default function App() {
   }, []);
 
   const loadUnread = useCallback(() => {
-    api
-      .events(200)
-      .then((events: AlertEvent[]) => {
+    Promise.all([api.events(200), api.meta()])
+      .then(([events, meta]) => {
         const seen = new Set<string>(JSON.parse(localStorage.getItem(SEEN_EVENTS_KEY) || "[]"));
-        const week = Date.now() - 7 * 24 * 3600 * 1000;
+        // Unread window = 7 days ending at data_as_of (demo clock), not real now.
+        const asOfDay = (meta.data_as_of || new Date().toISOString()).slice(0, 10);
+        const cutoff = new Date(asOfDay + "T00:00:00").getTime() - 7 * 24 * 3600 * 1000;
         setUnread(
-          events.filter((e) => !seen.has(String(e.id)) && new Date(e.fired_at).getTime() > week).length
+          events.filter((e) => {
+            const t = new Date((e.date || e.fired_at).slice(0, 10) + "T00:00:00").getTime();
+            return !seen.has(String(e.id)) && t >= cutoff;
+          }).length
         );
       })
       .catch(() => {});
@@ -60,7 +64,7 @@ export default function App() {
     <div className="app-shell">
       <div className="main-scroll">
         {tab === "briefing" && (
-          <Briefing bySymbol={bySymbol} symbolFilter={symbolFilter} clearFilter={() => setSymbolFilter("")} onOpen={setOpenItem} />
+          <Briefing bySymbol={bySymbol} symbolFilter={symbolFilter} clearFilter={() => setSymbolFilter("")} onOpen={setOpenItem} onOpenStock={openStock} />
         )}
         {tab === "alerts" && <Alerts onSeen={markEventsSeen} onOpenStock={openStock} />}
         {tab === "research" && <Research />}
@@ -79,7 +83,9 @@ export default function App() {
           <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
               {label}
-              {t === "alerts" && unread > 0 && <span className="badge">{unread}</span>}
+              {t === "alerts" && unread > 0 && (
+                <span className="badge">{unread > 99 ? "99+" : unread}</span>
+              )}
             </span>
           </button>
         ))}

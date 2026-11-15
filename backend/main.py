@@ -78,10 +78,26 @@ def refresh():
         return {"status": "error", "refreshed": False, "message": f"refresh failed: {e}; data as of {as_of}"}
 
 
+@app.get("/api/meta")
+def meta():
+    """Data freshness + mode, for anchoring client-side windows to the demo clock."""
+    import sqlite3
+    from backend.config import DB_PATH, FINN_MODE
+
+    conn = sqlite3.connect(DB_PATH)
+    as_of = conn.execute("SELECT MAX(ts_iso) FROM announcements").fetchone()[0]
+    last_price = conn.execute("SELECT MAX(date) FROM prices").fetchone()[0]
+    conn.close()
+    if last_price and (not as_of or last_price > as_of[:10]):
+        as_of = last_price
+    return {"data_as_of": as_of, "mode": FINN_MODE}
+
+
 @app.get("/api/portfolio")
 def get_portfolio(since: str = ""):
     """Per-stock portfolio rows: last close, day %, 20d volume ratio,
-    30-day sparkline closes, unseen filing count since `since` (ISO date)."""
+    30-day sparkline closes, unseen filing count since `since` (ISO date).
+    The window is anchored to data_as_of (demo clock), not real now."""
     import json
     import re
     import sqlite3
@@ -113,23 +129,25 @@ def get_portfolio(since: str = ""):
                    if len(rows) > 1 and rows[1]["close"] else None)
         vol_ratio = (rows[0]["volume"] / mean(r["volume"] for r in rows[1:21])
                      if len(rows) > 2 else None)
-        since_dt = None
+        as_of = conn.execute("SELECT MAX(ts_iso) FROM announcements").fetchone()[0]
+        last_price = conn.execute("SELECT MAX(date) FROM prices").fetchone()[0]
+        if last_price and (not as_of or last_price > as_of[:10]):
+            as_of = last_price
+        as_of_day = (as_of or datetime.utcnow().date().isoformat())[:10]
         if since:
             try:
                 since_dt = datetime.fromisoformat(since[:10])
             except ValueError:
-                since_dt = datetime.utcnow() - timedelta(days=3)
+                since_dt = datetime.fromisoformat(as_of_day) - timedelta(days=3)
         else:
-            since_dt = datetime.utcnow() - timedelta(days=3)
-        n_ann = 0
-        for (ts,) in conn.execute(
-            "SELECT ts FROM announcements WHERE symbol=?", (sym,)
-        ).fetchall():
-            try:
-                if datetime.strptime(ts, "%d-%b-%Y %H:%M:%S") >= since_dt:
-                    n_ann += 1
-            except (ValueError, TypeError):
-                pass
+            since_dt = datetime.fromisoformat(as_of_day) - timedelta(days=3)
+        as_of_dt = datetime.fromisoformat(as_of_day) + timedelta(days=1)
+        if since_dt >= as_of_dt:
+            since_dt = as_of_dt  # client already seen everything up to data_as_of
+        n_ann = conn.execute(
+            "SELECT COUNT(*) FROM announcements WHERE symbol=? AND ts_iso >= ?",
+            (sym, since_dt.date().isoformat()),
+        ).fetchone()[0]
         # Company name from cached screener HTML <title> (real data, no invention)
         name = sym
         for variant in ("consolidated", "standalone"):

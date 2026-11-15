@@ -1,7 +1,7 @@
 import { DigestItem, num } from "./api";
 import { fmtTs } from "./api";
 import { Chip, Sheet } from "./ui";
-import { tierRail } from "./Briefing";
+import { ResultsTable, tierRail } from "./Briefing";
 
 function BreakdownRow({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
@@ -28,6 +28,13 @@ export default function ItemSheet({ item, onClose }: { item: DigestItem; onClose
       <div style={{ color: "var(--muted)", fontSize: 12.5, marginBottom: 12 }}>{fmtTs(item.ts)} · NSE</div>
 
       <div style={{ fontSize: 15, lineHeight: 1.5, marginBottom: 14 }}>{item.voice_summary || item.subject}</div>
+
+      {item.category === "results" && item.results_summary && <ResultsTable rs={item.results_summary} />}
+      {item.category === "results" && !item.results_summary && (
+        <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 12 }}>
+          Numbers not yet in standardised data — see the source filing.
+        </div>
+      )}
 
       {item.voice_summary && (
         <div style={{ fontSize: 13.5, color: "var(--muted)", marginBottom: 14, padding: 10, background: "var(--surface2)", borderRadius: 8 }}>

@@ -33,6 +33,27 @@ export interface DigestChild {
   price_ctx: PriceCtx;
 }
 
+export interface ResultsRow {
+  metric: string;
+  value: number | null;
+  qoq_pct: number | null;
+  yoy_pct: number | null;
+  qoq_abs: number | null;
+  yoy_abs: number | null;
+}
+
+export interface ResultsSummary {
+  quarter: string;
+  filing_quarter: string | null;
+  basis: string;
+  unit: string;
+  rows: ResultsRow[];
+  ebitda_margin: number | null;
+  pat_margin: number | null;
+  note: string;
+  available: boolean;
+}
+
 export interface DigestItem {
   id: string;
   symbol: string;
@@ -40,6 +61,9 @@ export interface DigestItem {
   ts_iso: string | null;
   subject: string;
   voice_summary: string | null;
+  headline?: string;
+  mentions_results?: boolean;
+  results_summary?: ResultsSummary | null;
   attachment_url: string;
   category: string;
   score: number;
@@ -82,6 +106,8 @@ export interface AlertEvent {
   threshold: number;
   message: string;
   fired_at: string;
+  company?: string;
+  reason?: string;
 }
 
 export interface Holding {
@@ -106,8 +132,14 @@ async function getJSON<T>(url: string): Promise<T> {
   return r.json();
 }
 
+export interface Meta {
+  data_as_of: string | null;
+  mode: string;
+}
+
 export const api = {
   digest: (window: string) => getJSON<Digest>(`/api/digest?window=${window}`),
+  meta: () => getJSON<Meta>("/api/meta"),
   rules: () => getJSON<Rule[]>("/api/alerts/rules"),
   events: (limit = 100) => getJSON<AlertEvent[]>(`/api/alerts/events?limit=${limit}`),
   dryrun: () => getJSON<{ total_would_fire: number; events: AlertEvent[] }>("/api/alerts/dryrun"),
@@ -146,6 +178,13 @@ export function fmtTs(ts: string): string {
   const hh = String(d.getHours()).padStart(2, "0");
   const mm = String(d.getMinutes()).padStart(2, "0");
   return `${d.getDate()} ${MONTHS[d.getMonth()]}, ${hh}:${mm}`;
+}
+
+// Full date from an ISO date string: "2026-10-31" -> "31 Oct 2026"
+export function fmtDate(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso.slice(0, 10) + "T00:00:00");
+  return isNaN(d.getTime()) ? iso : `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 export const inr = (v: number | null | undefined) =>

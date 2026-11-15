@@ -15,8 +15,75 @@ from pydantic import BaseModel
 from typing import Optional
 
 from backend.config import DB_PATH
+from backend.push.context import company_name
 
 router = APIRouter()
+
+CAT_LABELS = {
+    "results": "Results filed",
+    "M&A": "M&A announced",
+    "management_change": "Management change",
+    "litigation": "Litigation update",
+    "credit_rating": "Credit rating action",
+    "fund_raise": "Fund raising",
+    "dividend": "Dividend declared",
+    "pledging": "Pledge update",
+    "insider_trading": "Insider trade",
+}
+
+
+def _price_move(symbol: str, date: str, conn) -> float | None:
+    rows = conn.execute(
+        "SELECT close FROM prices WHERE symbol=? AND date<=? ORDER BY date DESC LIMIT 2",
+        (symbol, date),
+    ).fetchall()
+    if len(rows) < 2 or not rows[1][0]:
+        return None
+    return round((rows[0][0] - rows[1][0]) / rows[1][0] * 100, 1)
+
+
+def _on_results_day(symbol: str, date: str, conn) -> bool:
+    """Results filed that day or the previous day (after-close filings)."""
+    try:
+        d = datetime.date.fromisoformat(date)
+    except (ValueError, TypeError):
+        return False
+    for back in (0, 1):
+        day = (d - datetime.timedelta(days=back)).isoformat()
+        n = conn.execute(
+            "SELECT COUNT(*) FROM announcements WHERE symbol=? AND category='results' "
+            "AND substr(ts_iso,1,10)=?",
+            (symbol, day),
+        ).fetchone()[0]
+        if n:
+            return True
+    return False
+
+
+def _enrich(row, conn) -> dict:
+    e = dict(row)
+    e["company"] = company_name(e["symbol"])
+    kind = e["kind"]
+    if kind == "volume_ratio":
+        reason = f"Volume {e['value']}x 20-day average"
+    elif kind == "price_move":
+        reason = f"Price {e['value']:+.1f}%"
+    else:
+        cat = None
+        if e["announcement_id"]:
+            r = conn.execute(
+                "SELECT category FROM announcements WHERE id=?", (e["announcement_id"],)
+            ).fetchone()
+            cat = r[0] if r else None
+        reason = CAT_LABELS.get(cat or "", "Announcement filed")
+    if kind in ("volume_ratio", "price_move"):
+        pm = _price_move(e["symbol"], e["date"], conn)
+        if pm is not None and abs(pm) >= 1 and kind == "volume_ratio":
+            reason += f", price {pm:+.1f}%"
+        if _on_results_day(e["symbol"], e["date"], conn):
+            reason += " on results day"
+    e["reason"] = reason
+    return e
 
 
 class RuleIn(BaseModel):
@@ -74,8 +141,9 @@ def list_events(symbol: str = "", limit: int = 100):
     q += " ORDER BY fired_at DESC LIMIT ?"
     params.append(limit)
     rows = conn.execute(q, params).fetchall()
+    out = [_enrich(r, conn) for r in rows]
     conn.close()
-    return [dict(r) for r in rows]
+    return out
 
 
 @router.post("/alerts/scan")
@@ -95,8 +163,9 @@ def dry_run():
            FROM alert_events e JOIN alert_rules r ON e.rule_id=r.id
            ORDER BY e.fired_at DESC LIMIT 200"""
     ).fetchall()
+    enriched = [_enrich(e, conn) for e in events]
     conn.close()
     return {
-        "total_would_fire": len(events),
-        "events": [dict(e) for e in events],
+        "total_would_fire": len(enriched),
+        "events": enriched,
     }

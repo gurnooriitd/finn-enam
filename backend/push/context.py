@@ -11,6 +11,10 @@ Rules:
 - No price data for the resolved day -> all None (UI shows nothing).
 """
 import datetime
+import html
+import re
+
+from backend.config import RAW_DIR
 
 MONTHS = {m: i + 1 for i, m in enumerate(
     ["jan", "feb", "mar", "apr", "may", "jun",
@@ -88,3 +92,22 @@ def price_context(symbol: str, ts: str, conn) -> dict:
         if avg > 0:
             out["vol_ratio"] = round(session["volume"] / avg, 2)
     return out
+
+
+_NAME_CACHE: dict[str, str] = {}
+
+
+def company_name(symbol: str) -> str:
+    """Real company name from the cached screener page <title>; symbol if unknown."""
+    if symbol in _NAME_CACHE:
+        return _NAME_CACHE[symbol]
+    name = symbol
+    for variant in ("consolidated", "standalone"):
+        p = RAW_DIR / "screener" / f"{symbol}_{variant}.html"
+        if p.exists():
+            m = re.search(r"<title>([^<\n|-]+)", p.read_text(errors="ignore"))
+            if m:
+                name = html.unescape(re.sub(r"\s+share price\s*$", "", m.group(1).strip()))
+                break
+    _NAME_CACHE[symbol] = name
+    return name

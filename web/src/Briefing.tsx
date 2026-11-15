@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, Digest, DigestChild, DigestItem, Holding } from "./api";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { api, Digest, DigestChild, DigestItem, Holding, ResultsSummary, num } from "./api";
 import { fmtTs } from "./api";
 import { Chip, Delta, Empty, ErrorBox, Skeleton } from "./ui";
 
@@ -45,9 +45,51 @@ function ChildList({ item }: { item: DigestItem }) {
   );
 }
 
-export function MustSeeCard({ item, h, onOpen }: { item: DigestItem; h?: Holding; onOpen: (i: DigestItem) => void }) {
+function ArrowPct({ v }: { v: number | null }) {
+  if (v == null) return <span className="num rt-na">n/a</span>;
+  const up = v >= 0;
+  return (
+    <span className="num" style={{ color: up ? "var(--up)" : "var(--down)" }}>
+      {up ? "▲" : "▼"} {up ? "+" : ""}
+      {v.toFixed(1)}%
+    </span>
+  );
+}
+
+export function ResultsTable({ rs }: { rs: ResultsSummary }) {
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div className="rt">
+        <span className="rt-h">{rs.quarter} results</span>
+        <span className="rt-h num" style={{ textAlign: "right" }}>Rs cr</span>
+        <span className="rt-h num" style={{ textAlign: "right" }}>QoQ</span>
+        <span className="rt-h num" style={{ textAlign: "right" }}>YoY</span>
+        {rs.rows.map((r) => (
+          <Fragment key={r.metric}>
+            <span style={{ fontSize: 13 }}>{r.metric}</span>
+            <span className="num" style={{ textAlign: "right" }}>
+              {r.value == null ? "n/a" : num(r.value, 0)}
+            </span>
+            <span style={{ textAlign: "right" }}><ArrowPct v={r.qoq_pct} /></span>
+            <span style={{ textAlign: "right" }}><ArrowPct v={r.yoy_pct} /></span>
+          </Fragment>
+        ))}
+      </div>
+      <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 5, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        {rs.ebitda_margin != null && <span className="num">EBITDA mgn {rs.ebitda_margin}%</span>}
+        {rs.pat_margin != null && <span className="num">PAT mgn {rs.pat_margin}%</span>}
+        <span className="chip" style={{ fontSize: 10.5 }}>screener standardised, {rs.basis}</span>
+        {rs.note && <span>{rs.note}</span>}
+      </div>
+    </div>
+  );
+}
+
+export function MustSeeCard({ item, h, onOpen, onOpenStock }: { item: DigestItem; h?: Holding; onOpen: (i: DigestItem) => void; onOpenStock?: (s: string) => void }) {
   const [open, setOpen] = useState(false);
   const pc = item.price_ctx;
+  const headline = item.headline ?? item.voice_summary ?? item.subject;
+  const rs = item.category === "results" ? item.results_summary : null;
   return (
     <div style={{ marginBottom: 10 }}>
       <button
@@ -63,11 +105,37 @@ export function MustSeeCard({ item, h, onOpen }: { item: DigestItem; h?: Holding
             {item.score?.toFixed(1)}
           </span>
         </div>
-        <div style={{ margin: "4px 0 8px", fontSize: 14, color: "var(--text)", textAlign: "left" }}>
-          {item.voice_summary || item.subject}
-        </div>
+        {rs ? (
+          <ResultsTable rs={rs} />
+        ) : (
+          <div style={{ margin: "4px 0 8px", fontSize: 14, color: "var(--text)", textAlign: "left" }}>
+            <span className="clamp2">{headline}</span>
+            {headline.length > 90 && (
+              <button
+                className="more"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpen(item);
+                }}
+              >
+                more
+              </button>
+            )}
+          </div>
+        )}
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
           <Chip accent>{item.category}</Chip>
+          {item.mentions_results && onOpenStock && (
+            <button
+              className="chip"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenStock(item.symbol);
+              }}
+            >
+              → results card
+            </button>
+          )}
           <Chip>{fmtTs(item.ts)}</Chip>
           {pc?.day_pct != null && (
             <Chip>
@@ -105,8 +173,42 @@ export function MustSeeCard({ item, h, onOpen }: { item: DigestItem; h?: Holding
   );
 }
 
-export function OneLiner({ item, onOpen }: { item: DigestItem; onOpen: (i: DigestItem) => void }) {
+export function OneLiner({ item, onOpen, onOpenStock }: { item: DigestItem; onOpen: (i: DigestItem) => void; onOpenStock?: (s: string) => void }) {
   const [open, setOpen] = useState(false);
+  const rs = item.category === "results" ? item.results_summary : null;
+  if (rs) {
+    return (
+      <div>
+        <button
+          className="card rail"
+          style={{ borderLeftColor: tierRail(item.tier), padding: "9px 12px 10px", marginBottom: 6, width: "100%" }}
+          onClick={() => onOpen(item)}
+        >
+          <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+            <span className="num" style={{ fontWeight: 600, fontSize: 13 }}>{item.symbol}</span>
+            <span className="num" style={{ color: "var(--muted)", fontSize: 12 }}>{rs.quarter} results</span>
+            {item.child_count > 1 && (
+              <button
+                className="chip"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpen(!open);
+                }}
+              >
+                x{item.child_count}
+              </button>
+            )}
+            <span className="num" style={{ color: "var(--muted)", fontSize: 11.5, marginLeft: "auto" }}>
+              {item.score?.toFixed(1)}
+            </span>
+          </div>
+          <ResultsTable rs={rs} />
+        </button>
+        {open && item.child_count > 1 && <ChildList item={item} />}
+      </div>
+    );
+  }
+  const headline = item.headline ?? item.voice_summary ?? item.subject;
   return (
     <div>
       <button
@@ -118,8 +220,19 @@ export function OneLiner({ item, onOpen }: { item: DigestItem; onOpen: (i: Diges
           {item.symbol}
         </span>
         <span style={{ fontSize: 13, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {item.voice_summary || item.subject}
+          {headline}
         </span>
+        {item.mentions_results && onOpenStock && (
+          <button
+            className="chip"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenStock(item.symbol);
+            }}
+          >
+            → results
+          </button>
+        )}
         {item.child_count > 1 && (
           <button
             className="chip"
@@ -145,9 +258,10 @@ interface Props {
   symbolFilter: string;
   clearFilter: () => void;
   onOpen: (i: DigestItem) => void;
+  onOpenStock: (s: string) => void;
 }
 
-export default function Briefing({ bySymbol, symbolFilter, clearFilter, onOpen }: Props) {
+export default function Briefing({ bySymbol, symbolFilter, clearFilter, onOpen, onOpenStock }: Props) {
   const [wanted, setWanted] = useState("24h");
   const [effWindow, setEffWindow] = useState("24h");
   const [widenedNote, setWidenedNote] = useState("");
@@ -160,6 +274,7 @@ export default function Briefing({ bySymbol, symbolFilter, clearFilter, onOpen }
   const load = useCallback(async (w: string, widenFrom?: string) => {
     setLoading(true);
     setErr("");
+    if (!widenFrom) setWidenedNote("");
     try {
       const d = await api.digest(w);
       if (d.total === 0) {
@@ -229,24 +344,22 @@ export default function Briefing({ bySymbol, symbolFilter, clearFilter, onOpen }
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 }}>
-        <h1 style={{ fontSize: 22, margin: 0, fontWeight: 700 }}>
-          {loading && !digest ? (
-            <span className="num" style={{ color: "var(--muted)" }}>…</span>
-          ) : (
-            <>
-              <span className="num">{filtered?.total ?? 0}</span> filings →{" "}
-              <span className="num" style={{ color: "var(--accent)" }}>{filtered?.summary.must_see ?? 0}</span> must-see
-            </>
-          )}
-        </h1>
-        <div className="windowchips" role="tablist" aria-label="window">
-          {WINDOWS.map((w) => (
-            <button key={w} className={effWindow === w ? "on" : ""} onClick={() => setWanted(w)}>
-              {w}
-            </button>
-          ))}
-        </div>
+      <h1 style={{ fontSize: 22, margin: 0, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        {loading && !digest ? (
+          <span className="num" style={{ color: "var(--muted)" }}>…</span>
+        ) : (
+          <>
+            <span className="num">{filtered?.total ?? 0}</span> filings →{" "}
+            <span className="num" style={{ color: "var(--accent)" }}>{filtered?.summary.must_see ?? 0}</span> must-see
+          </>
+        )}
+      </h1>
+      <div className="windowchips" role="tablist" aria-label="window" style={{ marginTop: 8 }}>
+        {WINDOWS.map((w) => (
+          <button key={w} className={effWindow === w ? "on" : ""} onClick={() => setWanted(w)}>
+            {w}
+          </button>
+        ))}
       </div>
 
       {/* Directly under the window chips: widened note + data freshness */}
@@ -292,7 +405,7 @@ export default function Briefing({ bySymbol, symbolFilter, clearFilter, onOpen }
                 <span className="num" style={{ fontSize: 12, color: "var(--muted)" }}>{filtered.summary.must_see}</span>
               </div>
               {filtered.must_see.map((i) => (
-                <MustSeeCard key={i.id} item={i} h={bySymbol.get(i.symbol)} onOpen={onOpen} />
+                <MustSeeCard key={i.id} item={i} h={bySymbol.get(i.symbol)} onOpen={onOpen} onOpenStock={onOpenStock} />
               ))}
             </>
           )}
@@ -304,7 +417,7 @@ export default function Briefing({ bySymbol, symbolFilter, clearFilter, onOpen }
                 <span className="num" style={{ fontSize: 12, color: "var(--muted)" }}>{filtered.summary.worth_a_look}</span>
               </div>
               {filtered.worth_a_look.map((i) => (
-                <OneLiner key={i.id} item={i} onOpen={onOpen} />
+                <OneLiner key={i.id} item={i} onOpen={onOpen} onOpenStock={onOpenStock} />
               ))}
             </>
           )}
@@ -333,7 +446,7 @@ export default function Briefing({ bySymbol, symbolFilter, clearFilter, onOpen }
                   {openRoutineCats.has(cat) && (
                     <div className="lane-expand" style={{ padding: "8px 2px" }}>
                       {items.map((i) => (
-                        <OneLiner key={i.id} item={i} onOpen={onOpen} />
+                        <OneLiner key={i.id} item={i} onOpen={onOpen} onOpenStock={onOpenStock} />
                       ))}
                     </div>
                   )}
@@ -363,9 +476,9 @@ export default function Briefing({ bySymbol, symbolFilter, clearFilter, onOpen }
                 </div>
                 {items.map((i) =>
                   i.tier === "must_see" ? (
-                    <MustSeeCard key={i.id} item={i} h={h} onOpen={onOpen} />
+                    <MustSeeCard key={i.id} item={i} h={h} onOpen={onOpen} onOpenStock={onOpenStock} />
                   ) : (
-                    <OneLiner key={i.id} item={i} onOpen={onOpen} />
+                    <OneLiner key={i.id} item={i} onOpen={onOpen} onOpenStock={onOpenStock} />
                   )
                 )}
               </div>

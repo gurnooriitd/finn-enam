@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, AlertEvent, Rule } from "./api";
+import { api, AlertEvent, Rule, fmtDate } from "./api";
 import { Chip, Empty, ErrorBox, Skeleton } from "./ui";
 
 const CATS = ["results", "M&A", "management_change", "litigation", "credit_rating", "fund_raise", "dividend", "pledging", "insider_trading"];
@@ -111,12 +111,16 @@ export default function Alerts({ onSeen, onOpenStock }: { onSeen: () => void; on
                         {row.symbol}
                       </span>
                       <span style={{ fontSize: 13, flex: 1, textAlign: "left" }}>
+                        <span style={{ fontWeight: unread ? 600 : 400 }}>
+                          {row.items[0].company || row.symbol}
+                        </span>
+                        {" — "}
                         {grouped
                           ? `${row.items.length} announcement${row.items.length > 1 ? "s" : ""}`
-                          : row.items[0].message}
+                          : row.items[0].reason || row.items[0].message}
                       </span>
                       <span className="num" style={{ color: "var(--muted)", fontSize: 11.5 }}>
-                        {row.date}
+                        {fmtDate(row.date)}
                         {grouped ? (expanded ? " ▲" : " ▼") : ""}
                       </span>
                     </button>
@@ -128,7 +132,7 @@ export default function Alerts({ onSeen, onOpenStock }: { onSeen: () => void; on
                             onClick={() => onOpenStock(e.symbol)}
                             style={{ display: "block", width: "100%", textAlign: "left", fontSize: 12.5, color: "var(--muted)", padding: "5px 0", background: "none", border: "none", borderBottom: "1px solid var(--line)" }}
                           >
-                            {e.message}
+                            {(e.reason || e.message)}
                           </button>
                         ))}
                       </div>
@@ -218,9 +222,9 @@ export default function Alerts({ onSeen, onOpenStock }: { onSeen: () => void; on
               </div>
               {dry.events.slice(0, 30).map((e) => (
                 <div key={e.id} className="card" style={{ padding: "9px 12px", marginBottom: 6, fontSize: 13 }}>
-                  {e.message}
+                  <span style={{ fontWeight: 600 }}>{e.company || e.symbol}</span> — {e.reason || e.message}
                   <span className="num" style={{ color: "var(--muted)", fontSize: 11.5, marginLeft: 8 }}>
-                    {e.kind} ≥ {e.threshold}
+                    {fmtDate(e.date)}
                   </span>
                 </div>
               ))}
