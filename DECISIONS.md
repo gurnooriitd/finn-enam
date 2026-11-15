@@ -95,3 +95,17 @@ voiceSummary clamped to 2 lines with "more" (walls of text were breaking the 10-
 
 ### D-24: Alert reasons computed at read time, not scan time
 Enrichment in /api/alerts/events + dryrun: company name (screener title, html-unescaped), one-line reason built from kind/value + same-day price move + results-filing check ("Volume 2.5x 20-day average, price +4.9%"). Stored messages left untouched — re-scanning to rewrite 147 rows would have churned the snapshot for cosmetics. Full "31 Oct 2026" dates rendered client-side.
+
+## Tiering sanity + card detail — 2026-11-15
+
+### D-25: Must-see = top 15% AND absolute floor 9.0; no min-3 padding
+The min-3 floor promoted quiet-window filler (credit reaffirmations, re-appointments) to must-see. Now: top 15% of clusters **and** score >= 9.0 — the floor was picked from the data: results/M&A/senior-mgmt clusters score 9.9–12.9, real fund raises 7.2, credit reaffirms 7.0, re-appointments 2.6, routine paperwork ≤0.5; 9.0 sits in the natural gap. A 24h window may have 1 (current data) or 0 must-see; header then reads "0 must-see, quiet window" and Worth-a-look leads. Also: ESOP/ESOS/ESPS allotment subjects, trading-window closures and compliance/duplicate certificates reclassified to unclassified (base 0.5) instead of fund_raise (7.0); bare "sebi" keyword replaced with "sebi order/notice/raid" (compliance certificates were getting +3.0); re-appointments demoted to base 2.5 and checked against subject+voiceSummary (subjects are terse); senior-role boost now reads voice text too.
+
+### D-26: Results card — inline deltas + deterministic takeaway line
+QoQ/YoY cells render "▲ +14.8%" on one nowrap line (tabular-nums, fits 390px). New rule-based takeaway under the table ("Revenue +14.8% YoY, PAT +16.0% YoY, EBITDA margin contracted 1.0pp vs last year") computed in results_summary.py from screener data — no LLM; margin delta vs same quarter last year, ±0.3pp dead-band.
+
+### D-27: Management-change extraction is regex, not LLM
+person/designation/action/effective-date parsed from subject+voiceSummary+body (honorific name tokens incl. initials, "as <role>" capture with stop-words, "effective/w.e.f/with effect from" date, normalised "23 Nov 2026"). Rendered "PERSON — ROLE — ACTION — effective DATE" above the clamped summary on cards + sheet, plus a "Look up background ↗" link that opens a quoted web search (person + company + role) in a new tab — no scraping, no invented bios; extraction failure falls back to summary only. Verified on 3 real filings (HAL CEO appointment, HDFCBANK re-appointment, Tata Steel retirement).
+
+### D-28: Alert inbox — human reasons, ISO event dates, 30-day + 7-day windows
+Reasons: "Volume 3.26x 20-day avg, price -2.1% (results filed)" for price/volume rules, "<Category>: <filing one-liner>" for category rules (label falls back to the category name). Events filtered to 30 days of data_as_of server-side; badge already unread-within-7-days capped 99+. Found and fixed stale rows from the pre-D-16 scan: 67 events carried NSE "DD-Mon-YYYY" dates (one truncated) and 36 duplicated newer ISO rows — dates re-derived from announcements.ts_iso, duplicates deleted, one orphan removed. ORDER BY date DESC (was fired_at DESC, which is the scan timestamp and identical for all rows).
