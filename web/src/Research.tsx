@@ -2,7 +2,8 @@
 // Numbers arrive computed (no LLM, no network in snapshot mode); missing data
 // renders "not available", never a guess.
 import { ReactNode, useEffect, useState } from "react";
-import { api, Dossier, SeriesPt } from "./api";
+import { api, AskHit, Dossier, Narrative, NarrativeLine, Promised, SeriesPt } from "./api";
+import PromisedView from "./Promised";
 import { Chip, Empty, ErrorBox, Skeleton, Sparkline } from "./ui";
 
 const cr = (v: number | null | undefined, digits = 0) =>
@@ -83,6 +84,19 @@ function Bars({ data, h = 72, fmt }: { data: SeriesPt[]; h?: number; fmt: (v: nu
   );
 }
 
+function Cited({ lines }: { lines: NarrativeLine[] }) {
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      {lines.map((line) => (
+        <p key={line.chunk_id + line.text.slice(0, 24)} style={{ margin: 0, fontSize: 13, lineHeight: 1.45 }}>
+          {line.text}{" "}
+          <span className="chip" style={{ color: "var(--info)" }}>{line.chunk_id === "tables" ? "screener tables" : line.chunk_id}</span>
+        </p>
+      ))}
+    </div>
+  );
+}
+
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div style={{ padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 8, minWidth: 0 }}>
@@ -104,13 +118,21 @@ export default function Research() {
   const [symbols, setSymbols] = useState<{ portfolio: string[]; more: string[] }>({ portfolio: [], more: [] });
   const [symbol, setSymbol] = useState<string>("");
   const [d, setD] = useState<Dossier | null>(null);
+  const [promised, setPromised] = useState<Promised | null>(null);
+  const [narrative, setNarrative] = useState<Narrative | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [askQ, setAskQ] = useState("");
+  const [askHits, setAskHits] = useState<AskHit[] | null>(null);
+  const [askNote, setAskNote] = useState("");
+  const [asking, setAsking] = useState(false);
 
   useEffect(() => {
     api.researchSymbols().then((r) => {
       setSymbols(r);
-      setSymbol((s) => s || r.portfolio[0] || r.more[0] || "");
+      const withCalls = new Set(r.with_calls || []);
+      const preferred = (r.with_calls || []).find((s) => r.portfolio.includes(s)) || r.with_calls?.[0];
+      setSymbol((s) => s || preferred || r.portfolio.find((x) => withCalls.has(x)) || r.portfolio[0] || r.more[0] || "");
     }).catch((e) => setError(String(e)));
   }, []);
 
@@ -118,11 +140,27 @@ export default function Research() {
     if (!symbol) return;
     setLoading(true);
     setError(null);
+    setPromised(null);
+    setNarrative(null);
+    setAskHits(null);
+    setAskNote("");
     api.dossier(symbol)
       .then(setD)
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
+    api.promised(symbol).then(setPromised).catch(() => setPromised(null));
+    api.narrative(symbol).then(setNarrative).catch(() => setNarrative(null));
   }, [symbol]);
+
+  const submitAsk = () => {
+    const q = askQ.trim();
+    if (q.length < 3 || !symbol) return;
+    setAsking(true);
+    api.ask(symbol, q)
+      .then((r) => { setAskHits(r.hits); setAskNote(r.note); })
+      .catch((e) => { setAskHits([]); setAskNote(String(e)); })
+      .finally(() => setAsking(false));
+  };
 
   const chipRow = (list: string[]) =>
     list.map((s) => (
@@ -136,7 +174,7 @@ export default function Research() {
     <div>
       <h1 style={{ fontSize: 20, margin: "0 0 4px", fontWeight: 700 }}>Research</h1>
       <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 10 }}>
-        Deterministic company dossiers from screener's standardised tables — no AI, no guessing.
+        Filings first. Numbers are computed from screener's tables. Promises are quotes from the concall, checked against those tables.
       </div>
 
       <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, marginBottom: 12 }}>
@@ -162,6 +200,8 @@ export default function Research() {
             </div>
           </div>
 
+          {promised ? <PromisedView data={promised} /> : <Skeleton rows={2} />}
+
           <Section title="Financial snapshot" tip={TIPS.snapshot}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               {d.snapshot.map((t) => (
@@ -183,6 +223,31 @@ export default function Research() {
               ))}
             </div>
           </Section>
+
+          {narrative && narrative.status === "ready" && narrative.business.length > 0 && (
+            <Section title="Business" tip="What the company does, taken from its annual report or concall. Every sentence cites the page it came from.">
+              <Cited lines={narrative.business} />
+            </Section>
+          )}
+
+          {narrative && narrative.status === "ready" && (narrative.bull.length > 0 || narrative.bear.length > 0) && (
+            <Section title="Bull vs bear" tip="Points on each side are facts from the filings or the standardised tables.">
+              <div style={{ display: "grid", gap: 12 }}>
+                {narrative.bull.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 11, color: "var(--up)", fontWeight: 700, marginBottom: 6 }}>BULL</div>
+                    <Cited lines={narrative.bull} />
+                  </div>
+                )}
+                {narrative.bear.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 11, color: "var(--down)", fontWeight: 700, marginBottom: 6 }}>BEAR</div>
+                    <Cited lines={narrative.bear} />
+                  </div>
+                )}
+              </div>
+            </Section>
+          )}
 
           <Section title="Trajectory" tip={TIPS.trajectory}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -248,6 +313,36 @@ export default function Research() {
               </div>
             )}
             {d.cash.note && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 8 }}>{d.cash.note}</div>}
+          </Section>
+
+          <Section title="Ask the filings" tip="Search this company's annual report and concall transcripts. You get the pages, not a generated answer, so nothing is added that the filing did not say.">
+            <form onSubmit={(e) => { e.preventDefault(); submitAsk(); }} style={{ display: "flex", gap: 8 }}>
+              <input
+                value={askQ}
+                onChange={(e) => setAskQ(e.target.value)}
+                placeholder={`What did ${symbol} say about margins?`}
+                aria-label="Ask the filings"
+                style={{
+                  flex: 1, minWidth: 0, background: "var(--surface2)", color: "var(--text)",
+                  border: "1px solid var(--line)", borderRadius: 8, padding: "10px 12px", fontSize: 14,
+                }}
+              />
+              <button className="btn" type="submit" disabled={asking || askQ.trim().length < 3} style={{ minWidth: 64 }}>
+                {asking ? "…" : "Ask"}
+              </button>
+            </form>
+            {askNote && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 8 }}>{askNote}</div>}
+            {askHits && askHits.length === 0 && <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 8 }}>No matching excerpt.</div>}
+            <div style={{ display: "grid", gap: 8, marginTop: askHits && askHits.length ? 10 : 0 }}>
+              {askHits?.map((h) => (
+                <div key={h.chunk_id} style={{ borderTop: "1px solid var(--line)", paddingTop: 8 }}>
+                  <div style={{ fontSize: 11, color: "var(--info)", marginBottom: 4 }}>
+                    {h.doc_kind === "CONCALL" ? "Concall" : "Annual report"} {h.period} · {h.chunk_id}{h.page ? ` · p.${h.page}` : ""}
+                  </div>
+                  <div style={{ fontSize: 13, lineHeight: 1.45 }}>{h.text}</div>
+                </div>
+              ))}
+            </div>
           </Section>
 
           <div style={{ paddingBottom: 4 }}>

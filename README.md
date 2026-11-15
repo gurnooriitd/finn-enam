@@ -57,20 +57,20 @@ with **no external network and no API keys** (`FINN_MODE=snapshot`).
   filing body and voice summary only as last resort. 17 categories.
 - **Per-filing price context**: day % and 20-session volume ratio at the
   filing's date, used in the UI chips and the anomaly boost.
-- **Cost ledger + `/api/costs`** (zero tokens in the hosted demo).
+- **Research dossier**: financial snapshot, trajectory, balance sheet and cash
+  quality computed from screener tables. Promised vs Delivered checks concall
+  quotes against those tables. Business and bull/bear lines are pre-extracted
+  and each one cites a filing chunk. Ask-the-filings returns the matching
+  pages and does not write an answer.
+- **Cost ledger + `/api/costs`**. The hosted app does not call a model
+  (`LLM_ENABLED=0`); extraction was done once locally and cached in the snapshot.
 - **Snapshot-first deploy**: `Dockerfile`, `.dockerignore`, `DEPLOY.md`.
 
-## What is deliberately not built (yet)
+## What is deliberately not built
 
-- **Pull side** (company dossier, Promised-vs-Delivered timeline, cited Q&A,
-  SSE streaming) — not started; the push side was prioritised end-to-end.
-- **LLM calls are disabled** (`LLM_ENABLED=0`): the LLM gateway endpoint
-  (Gemini) was unreachable/flaky from this network during the build, so all
-  classification and summarisation runs on deterministic rules + NSE's own
-  `voiceSummary` field. The gateway (`backend/llm/gateway.py`) is wired for
-  cheap/strong tiers with caching, retries and a cost ledger — flipping the
-  flag re-enables it without code changes. Zero LLM tokens in the hosted demo.
-- Web-push/Telegram delivery, natural-language alert creation, voice input.
+- A generated answer to a free-text question, and section-by-section streaming.
+- Voice input, Telegram or web-push delivery, natural-language alert creation.
+- Written commentary on the trajectory, balance-sheet and cash charts. Those stay computed.
 
 ## Run locally
 

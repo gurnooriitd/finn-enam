@@ -8,9 +8,12 @@ import json
 import re
 import sqlite3
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from backend.config import DB_PATH, PORTFOLIO_PATH, RAW_DIR
+from backend.pull.narrative import narrative_for
+from backend.pull.promised import corpus_symbols, promised_for
+from backend.pull.retrieve import retrieve
 
 router = APIRouter()
 
@@ -215,8 +218,65 @@ def research_symbols():
     conn = _connect()
     have = sorted(r[0] for r in conn.execute(
         "SELECT DISTINCT symbol FROM screener_fundamentals ORDER BY symbol"))
+    try:
+        calls = {r[0] for r in conn.execute(
+            "SELECT DISTINCT symbol FROM doc_chunks WHERE doc_kind='CONCALL'")}
+        # Open Research on the ticker with the most extracted promises, so the
+        # first screen is a checkable call rather than an empty transcript.
+        weight = {r[0]: r[1] for r in conn.execute(
+            "SELECT symbol, COUNT(*) FROM guidance_items GROUP BY symbol")}
+    except Exception:
+        calls, weight = set(), {}
     conn.close()
-    return {"portfolio": [s for s in pf if s in have], "more": [s for s in have if s not in pf]}
+    ordered = sorted(calls, key=lambda s: (-weight.get(s, 0), s not in pf, s))
+    return {
+        "portfolio": [s for s in pf if s in have],
+        "more": [s for s in have if s not in pf],
+        "with_calls": ordered,
+    }
+
+
+@router.get("/{symbol}/promised")
+def promised(symbol: str):
+    symbol = symbol.upper()
+    if not re.fullmatch(r"[A-Z0-9.&-]{1,20}", symbol):
+        raise HTTPException(400, "bad symbol")
+    payload = promised_for(symbol)
+    payload["corpus"] = corpus_symbols()
+    return payload
+
+
+@router.get("/{symbol}/narrative")
+def narrative(symbol: str):
+    symbol = symbol.upper()
+    if not re.fullmatch(r"[A-Z0-9.&-]{1,20}", symbol):
+        raise HTTPException(400, "bad symbol")
+    return narrative_for(symbol)
+
+
+@router.get("/{symbol}/ask")
+def ask(symbol: str, q: str = ""):
+    """Excerpts only. No generated answer, so the snapshot app cannot invent a claim."""
+    symbol = symbol.upper()
+    if not re.fullmatch(r"[A-Z0-9.&-]{1,20}", symbol):
+        raise HTTPException(400, "bad symbol")
+    question = (q or "").strip()
+    if len(question) < 3:
+        raise HTTPException(400, "ask a longer question")
+    hits = retrieve(symbol, question, k=3)
+    if not hits:
+        return {
+            "symbol": symbol,
+            "question": question,
+            "hits": [],
+            "note": "No annual-report or concall excerpts are loaded for this ticker.",
+        }
+    return {
+        "symbol": symbol,
+        "question": question,
+        "hits": hits,
+        "note": "Excerpts from this company's annual report and concall transcripts. Not a generated answer.",
+    }
 
 
 @router.get("/{symbol}")

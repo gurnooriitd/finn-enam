@@ -149,6 +149,7 @@ export interface PortfolioResp {
 export interface ResearchSymbols {
   portfolio: string[];
   more: string[];
+  with_calls?: string[];
 }
 
 export interface DossierTile {
@@ -199,6 +200,86 @@ export interface Dossier {
   note?: string;
 }
 
+export interface PromiseBar {
+  low: number;
+  high: number;
+  actual: number;
+  min: number;
+  max: number;
+}
+
+export interface PromiseItem {
+  metric: string;
+  metric_label: string;
+  comparison: string;
+  qualifier: string;
+  horizon: string;
+  quote: string;
+  speaker: string | null;
+  chunk_id: string;
+  page: number | null;
+  call_period: string;
+  interpreted: boolean;
+  low: number | null;
+  high: number | null;
+  actual: number | null;
+  actual_label: string | null;
+  promise_label: string;
+  verdict: string;
+  note: string;
+  bar: PromiseBar | null;
+  excerpt: string;
+}
+
+export interface PromiseGroup {
+  call_period: string;
+  label: string;
+  items: PromiseItem[];
+}
+
+export interface Promised {
+  symbol: string;
+  status: "ready" | "empty" | "not_extracted" | "no_corpus";
+  focus: string[];
+  groups: PromiseGroup[];
+  hit_rate: number | null;
+  counts: Record<string, number>;
+  pattern: string;
+  note: string;
+  corpus?: string[];
+}
+
+export interface AskHit {
+  chunk_id: string;
+  page: number | null;
+  doc_kind: string;
+  period: string | null;
+  section_hint: string | null;
+  score: number;
+  text: string;
+}
+
+export interface AskResp {
+  symbol: string;
+  question: string;
+  hits: AskHit[];
+  note: string;
+}
+
+export interface NarrativeLine {
+  text: string;
+  chunk_id: string;
+}
+
+export interface Narrative {
+  symbol: string;
+  status: "ready" | "empty" | "not_extracted";
+  business: NarrativeLine[];
+  bull: NarrativeLine[];
+  bear: NarrativeLine[];
+  note?: string;
+}
+
 async function getJSON<T>(url: string): Promise<T> {
   const r = await fetch(url);
   if (!r.ok) throw new Error(`${r.status} ${url}`);
@@ -219,6 +300,11 @@ export const api = {
   portfolio: () => getJSON<PortfolioResp>("/api/portfolio"),
   researchSymbols: () => getJSON<ResearchSymbols>("/api/research"),
   dossier: (symbol: string) => getJSON<Dossier>(`/api/research/${symbol}`),
+  promised: (symbol: string) => getJSON<Promised>(`/api/research/${symbol}/promised`),
+  narrative: (symbol: string) => getJSON<Narrative>(`/api/research/${symbol}/narrative`),
+  ask: (symbol: string, q: string) =>
+    getJSON<AskResp>(`/api/research/${symbol}/ask?q=${encodeURIComponent(q)}`),
+  costs: () => getJSON<{ totals: { total_cost: number | null; total_tokens: number | null; cache_hits: number | null; total_calls: number | null } }>("/api/costs"),
   updateRule: (id: number, body: Partial<Rule>) =>
     fetch(`/api/alerts/rules/${id}`, {
       method: "PUT",

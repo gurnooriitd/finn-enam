@@ -1,0 +1,5 @@
+# SQLite snapshots must stay byte-for-byte. autocrlf on Windows
+# rewrites them and the file then fails integrity_check.
+*.db binary
+*.sqlite binary
+*.pdf binary
