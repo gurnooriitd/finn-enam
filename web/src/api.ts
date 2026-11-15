@@ -62,7 +62,11 @@ export interface MgmtChange {
   role: string | null;
   action: string;
   effective_date: string | null;
-  lookup_url?: string;
+  reason?: string | null;
+  predecessor?: string | null;
+  bio?: string | null;
+  confidence?: string | null;
+  sources?: { title: string | null; url: string; snippet: string | null }[] | null;
 }
 
 export interface DigestItem {

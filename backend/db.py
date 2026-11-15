@@ -133,6 +133,20 @@ def init_db():
         fired_at TEXT,
         UNIQUE(rule_id, symbol, date, announcement_id)
     );
+    CREATE TABLE IF NOT EXISTS people_enrichment (
+        announcement_id TEXT PRIMARY KEY,
+        symbol TEXT,
+        person TEXT,
+        designation TEXT,
+        action TEXT,
+        effective_date TEXT,
+        reason TEXT,
+        predecessor TEXT,
+        bio TEXT,
+        confidence TEXT,
+        sources_json TEXT,
+        created_at TEXT
+    );
     """)
 
     # Migration: sortable ISO timestamp column (NSE ts is 'DD-Mon-YYYY HH:MM:SS',

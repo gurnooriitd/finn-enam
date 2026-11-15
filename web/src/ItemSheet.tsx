@@ -30,11 +30,6 @@ export default function ItemSheet({ item, onClose }: { item: DigestItem; onClose
       {item.mgmt_change && (
         <div style={{ marginBottom: 12 }}>
           <MgmtLine m={item.mgmt_change} />
-          {item.mgmt_change.lookup_url && (
-            <a href={item.mgmt_change.lookup_url} target="_blank" rel="noreferrer" style={{ fontSize: 12.5 }}>
-              Look up background ↗
-            </a>
-          )}
         </div>
       )}
 

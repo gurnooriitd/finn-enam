@@ -206,19 +206,36 @@ def get_digest(
                 rs = None
         mgmt = None
         if c["category"] == "management_change":
-            from backend.push.context import company_name
-            from backend.push.people import extract_mgmt_change, lookup_url
+            from backend.push.people import extract_mgmt_change
             try:
                 mc = extract_mgmt_change(
                     lead["subject"] or "", lead["voice_summary"] or "",
                     lead.get("raw_desc") or "",
                 )
                 if mc:
-                    company = company_name(c["symbol"])
-                    mc["lookup_url"] = lookup_url(mc["person"], company, mc["role"])
                     mgmt = mc
             except Exception:
                 mgmt = None
+            # batch enrichment (cached in DB by scripts/enrich_people.py) overlays the regex
+            er = conn.execute(
+                "SELECT * FROM people_enrichment WHERE announcement_id=?", (lead["id"],)
+            ).fetchone()
+            if er:
+                base = mgmt or {}
+                mgmt = {
+                    "person": er["person"] or base.get("person"),
+                    "role": er["designation"] or base.get("role"),
+                    "action": er["action"] or base.get("action") or "change",
+                    "effective_date": er["effective_date"] or base.get("effective_date"),
+                    "reason": er["reason"],
+                    "predecessor": er["predecessor"],
+                    "bio": er["bio"],
+                    "confidence": er["confidence"],
+                    "sources": [
+                        s if isinstance(s, dict) else {"title": None, "url": s, "snippet": None}
+                        for s in json.loads(er["sources_json"] or "[]")
+                    ],
+                }
         return {
             "id": lead["id"],
             "symbol": c["symbol"],

@@ -58,13 +58,42 @@ function ArrowPct({ v }: { v: number | null }) {
   );
 }
 
+const hostOf = (url: string) => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+};
+
 export function MgmtLine({ m }: { m: NonNullable<DigestItem["mgmt_change"]> }) {
+  const unverified = !m.bio || m.confidence === "low" || m.bio === "background not verified";
   return (
     <div style={{ fontSize: 13, margin: "3px 0 4px", lineHeight: 1.4 }}>
-      <span style={{ fontWeight: 600 }}>{m.person}</span>
-      {m.role ? <span> — {m.role}</span> : null}
-      <span> — {m.action}</span>
-      {m.effective_date ? <span> — effective {m.effective_date}</span> : null}
+      <div>
+        <span style={{ fontWeight: 600 }}>{m.person}</span>
+        {m.role ? <span> — {m.role}</span> : null}
+        <span> — {m.action}</span>
+        {m.effective_date ? <span> — effective {m.effective_date}</span> : null}
+      </div>
+      {m.bio && !unverified && (
+        <div style={{ fontSize: 12, color: "var(--muted)", margin: "5px 0 0", lineHeight: 1.45 }}>{m.bio}</div>
+      )}
+      {unverified && m.bio && (
+        <div style={{ fontSize: 12, color: "var(--muted)", margin: "5px 0 0", fontStyle: "italic" }}>
+          background not verified
+        </div>
+      )}
+      {m.sources && m.sources.length > 0 && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+          {m.sources.slice(0, 4).map((s, i) => (
+            <a key={i} className="chip" href={s.url} target="_blank" rel="noreferrer" style={{ fontSize: 10.5 }}>
+              {hostOf(s.url)} ↗
+            </a>
+          ))}
+          {!unverified && <span className="chip" style={{ fontSize: 10.5 }}>web-sourced, verify</span>}
+        </div>
+      )}
     </div>
   );
 }
@@ -142,17 +171,6 @@ export function MustSeeCard({ item, h, onOpen, onOpenStock }: { item: DigestItem
         )}
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
           <Chip accent>{item.category}</Chip>
-          {item.mgmt_change?.lookup_url && (
-            <a
-              href={item.mgmt_change.lookup_url}
-              target="_blank"
-              rel="noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              style={{ fontSize: 12.5 }}
-            >
-              Look up background ↗
-            </a>
-          )}
           {item.mentions_results && onOpenStock && (
             <button
               className="chip"
