@@ -51,3 +51,11 @@ Spec default (must_see>=12) left must_see empty: results/M&A cluster at 10.1-10.
 
 ### D-12: yfinance via Ticker().history(), not download()
 `yf.download` (single ticker) returns MultiIndex columns; row indexing crashed. `Ticker.history` returns flat columns and is what the 2160-row snapshot was built with.
+
+## Phase 4 — Push frontend — 2026-11-15
+
+### D-13: New /api/portfolio endpoint; unseen filings = client's last-view timestamp
+GET /api/portfolio?since=ISO returns per stock: name (parsed from cached screener HTML <title>, "share price" suffix stripped), last close, day %, 20d volume ratio, 30-day sparkline closes, unseen_filings (announcements since `since`; defaults to 72h when absent). The client keeps seen event ids / last-view in localStorage — no invented "seen" state server-side.
+
+### D-14: Frontend stack choices
+Vite + React + TS + Tailwind v4 (@tailwindcss/vite), no router (tab state), no chart lib (hand-rolled SVG sparklines), IBM Plex Sans/Mono via Google Fonts, dark default with light via prefers-color-scheme. Priority encoded as left-rail colour + card size, not badges. auto-widen: empty window escalates 24h→3d→7d→30d with a visible note. dist/ committed (snapshot-first deploy: FastAPI serves web/dist at "/" via StaticFiles, API stays under /api).
