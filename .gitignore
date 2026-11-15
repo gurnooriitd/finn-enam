@@ -5,7 +5,7 @@ data/raw/
 finn.db
 *.db
 node_modules/
-web/dist/
 .DS_Store
 *.db-shm
 *.db-wal
+web/tsconfig.tsbuildinfo
